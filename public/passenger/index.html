@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Your Taxi</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="app-bar">🚕 Rate Your Taxi</header>
+<main>
+
+  <section id="lookupSection" class="card">
+    <h2>Find your taxi</h2>
+    <input id="plateInput" placeholder="Enter number plate e.g. ND 456-123">
+    <button onclick="lookupByPlate()">Find taxi</button>
+    <button class="secondary" id="scanBtn" onclick="scanQr()">📷 Scan QR code instead</button>
+    <div id="lookupError" class="alert hidden"></div>
+  </section>
+
+  <section id="taxiSection" class="card hidden">
+    <h2 id="taxiPlate"></h2>
+    <p>Driver: <strong id="driverName"></strong></p>
+    <p class="muted" id="ratingSummary"></p>
+
+    <h2>Rate this trip</h2>
+    <div class="stars" id="starPicker">
+      <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span><span class="star" data-v="3">★</span><span class="star" data-v="4">★</span><span class="star" data-v="5">★</span>
+    </div>
+
+    <textarea id="comment" rows="3" placeholder="Leave a comment (optional)"></textarea>
+
+    <div id="reportOptions">
+      <div class="checkbox-row"><input type="checkbox" id="r1" value="unsafe driving"><label for="r1">Unsafe driving</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="r2" value="overloading"><label for="r2">Overloading</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="r3" value="rude behaviour"><label for="r3">Rude behaviour</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="r4" value="reckless speeding"><label for="r4">Reckless speeding</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="r5" value="compliment"><label for="r5">Compliment excellent service</label></div>
+    </div>
+
+    <button onclick="submitFeedback()">Submit feedback</button>
+    <div id="submitted" class="hidden">
+      <p>✅ Thanks — the owner has been notified.</p>
+      <button class="secondary" onclick="resetForm()">Rate another taxi</button>
+    </div>
+  </section>
+
+</main>
+<footer class="tip">Feedback goes straight to the taxi owner. Be honest — it helps keep drivers accountable.</footer>
+
+<script src="/passenger/app.js"></script>
+</body>
+</html>

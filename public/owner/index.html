@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Owner Dashboard — Taxi Fleet</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="app-bar">
+  🚐 Fleet Owner <small id="ownerName"></small>
+</header>
+<main>
+
+  <!-- AUTH -->
+  <section id="authSection" class="card">
+    <div class="tabs">
+      <button id="tabLogin" class="active">Login</button>
+      <button id="tabRegister">Register</button>
+    </div>
+    <div id="loginForm">
+      <input id="loginPhone" placeholder="Phone number">
+      <input id="loginPassword" type="password" placeholder="Password">
+      <button onclick="login()">Login</button>
+    </div>
+    <div id="registerForm" class="hidden">
+      <input id="regName" placeholder="Your name">
+      <input id="regPhone" placeholder="Phone number">
+      <input id="regPassword" type="password" placeholder="Password">
+      <button onclick="register()">Create owner account</button>
+    </div>
+    <div id="authError" class="alert hidden"></div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="hidden">
+
+    <div id="sosBanner"></div>
+
+    <section class="card">
+      <h2>Fleet overview</h2>
+      <div class="row">
+        <div class="stat"><div class="num" id="statOnline">0</div><div class="label">Online</div></div>
+        <div class="stat"><div class="num" id="statOffline">0</div><div class="label">Offline</div></div>
+        <div class="stat"><div class="num" id="statRating">–</div><div class="label">Avg Rating</div></div>
+        <div class="stat"><div class="num" id="statComplaints">0</div><div class="label">Complaints</div></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <div class="stat"><div class="num" id="earnToday">R0</div><div class="label">Today</div></div>
+        <div class="stat"><div class="num" id="earnWeek">R0</div><div class="label">This week</div></div>
+        <div class="stat"><div class="num" id="earnMonth">R0</div><div class="label">This month</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Register a taxi</h2>
+      <input id="newPlate" placeholder="Number plate e.g. ND 456-123">
+      <button onclick="addTaxi()">Add taxi + generate QR code</button>
+      <div id="newTaxiQr"></div>
+    </section>
+
+    <section class="card">
+      <h2>Taxis (<span id="taxiCount">0</span>)</h2>
+      <div id="taxiList"></div>
+    </section>
+
+    <section class="card">
+      <h2>Register a driver</h2>
+      <input id="drvName" placeholder="Driver name">
+      <input id="drvPhone" placeholder="Phone number (used to log in)">
+      <input id="drvLicense" placeholder="Driver's licence number">
+      <input id="drvPdp" placeholder="PDP number">
+      <div class="muted" style="margin-bottom:10px;">Document uploads (licence / PDP / ID / selfie photos) are a next step for this prototype — see notes at the end of the build.</div>
+      <button onclick="addDriver()">Add driver</button>
+    </section>
+
+    <section class="card">
+      <h2>Drivers (<span id="driverCount">0</span>)</h2>
+      <div id="driverList"></div>
+    </section>
+
+    <section class="card">
+      <h2>Live feedback &amp; complaints</h2>
+      <div id="feedbackList"></div>
+    </section>
+
+    <section class="card">
+      <h2>Message a driver</h2>
+      <select id="msgDriver"></select>
+      <textarea id="msgText" rows="2" placeholder="Message..."></textarea>
+      <button onclick="sendMessage()">Send</button>
+    </section>
+
+    <button class="secondary" onclick="logout()">Log out</button>
+  </div>
+
+</main>
+<footer class="tip">Prototype — plaintext auth, local SQLite. Not for production use as-is.</footer>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/owner/app.js"></script>
+</body>
+</html>

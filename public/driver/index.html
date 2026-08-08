@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Driver App — Taxi Fleet</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="app-bar">
+  🚖 Driver <small id="driverName"></small>
+</header>
+<main>
+
+  <section id="authSection" class="card">
+    <h2>Login</h2>
+    <input id="loginPhone" placeholder="Your phone number">
+    <button onclick="login()">Login</button>
+    <div id="authError" class="alert hidden"></div>
+    <p class="muted">Your owner must register you first.</p>
+  </section>
+
+  <div id="app" class="hidden">
+
+    <section class="card">
+      <h2>Shift</h2>
+      <p>Status: <span id="shiftStatus" class="badge offline">off duty</span></p>
+      <button id="startBtn" onclick="startShift()">Start shift</button>
+      <button id="endBtn" class="secondary hidden" onclick="endShift()">End shift</button>
+      <p class="muted" id="locStatus"></p>
+    </section>
+
+    <section class="card">
+      <h2>Record a trip / fare</h2>
+      <input id="fareInput" type="number" min="0" step="0.5" placeholder="Fare collected (R)">
+      <button onclick="logTrip()">Log trip</button>
+    </section>
+
+    <section class="card">
+      <h2>Earnings</h2>
+      <div class="row">
+        <div class="stat"><div class="num" id="earnToday">R0</div><div class="label">Today</div></div>
+        <div class="stat"><div class="num" id="earnWeek">R0</div><div class="label">Week</div></div>
+        <div class="stat"><div class="num" id="earnMonth">R0</div><div class="label">Month</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Messages from owner</h2>
+      <div id="messages"></div>
+    </section>
+
+    <section class="card">
+      <button class="danger" onclick="sendSos()">🚨 SOS — send location to owner</button>
+    </section>
+
+    <button class="secondary" onclick="logout()">Log out</button>
+  </div>
+
+</main>
+<footer class="tip">Prototype — location is only shared while a shift is active.</footer>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/driver/app.js"></script>
+</body>
+</html>
