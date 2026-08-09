@@ -13,6 +13,9 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Replit's preview opens the site root; send users to the primary app.
+app.get('/', (req, res) => res.redirect('/owner/'));
+
 // Sockets: owners join a room keyed to their id so we can push
 // live location updates, feedback, complaints and SOS alerts to them.
 io.on('connection', (socket) => {
@@ -33,7 +36,7 @@ app.use('/api/passenger', require('./routes/passenger'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Taxi fleet app running at http://localhost:${PORT}`);
   console.log(`  Owner:     http://localhost:${PORT}/owner/`);
