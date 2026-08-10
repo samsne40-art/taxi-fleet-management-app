@@ -1,23 +1,44 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const db = require('../db');
+const { requireDriver } = require('../middleware/auth');
 
-// Phone-based login. In production, add an OTP/SMS verification step
-// before trusting the phone number.
-router.post('/login', (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: 'phone required' });
+// ─── Auth (public) ────────────────────────────────────────────────────────────
+
+router.post('/login', async (req, res) => {
+  const { phone, password } = req.body;
+  if (!phone || !password)
+    return res.status(400).json({ error: 'phone and password are required' });
+
   const driver = db.prepare('SELECT * FROM drivers WHERE phone = ?').get(phone);
-  if (!driver) return res.status(404).json({ error: 'no driver registered with this number - ask your owner to register you' });
-  if (driver.status === 'suspended') return res.status(403).json({ error: 'your account has been suspended by the owner' });
-  res.json(driver);
+  if (!driver)
+    return res.status(401).json({ error: 'no driver registered with that number — ask your owner to add you' });
+  if (driver.status === 'suspended')
+    return res.status(403).json({ error: 'your account has been suspended by the owner' });
+  if (!driver.password)
+    return res.status(401).json({ error: 'no password set for this account — ask your owner to re-add you with a password' });
+
+  const match = await bcrypt.compare(password, driver.password);
+  if (!match)
+    return res.status(401).json({ error: 'incorrect phone number or password' });
+
+  req.session.userId = driver.id;
+  req.session.role = 'driver';
+  req.session.name = driver.name;
+
+  // Return driver info without the password hash
+  const { password: _pw, ...safeDriver } = driver;
+  res.json(safeDriver);
 });
 
-router.post('/:driverId/shift/start', (req, res) => {
+// ─── All routes below require an authenticated driver session ─────────────────
+
+router.post('/:driverId/shift/start', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
   if (!driver) return res.status(404).json({ error: 'driver not found' });
-  if (!driver.current_taxi_id) return res.status(400).json({ error: 'no taxi assigned - ask your owner to assign one' });
+  if (!driver.current_taxi_id) return res.status(400).json({ error: 'no taxi assigned — ask your owner to assign one' });
   if (driver.status === 'suspended') return res.status(403).json({ error: 'account suspended' });
 
   db.prepare('INSERT INTO shifts (driver_id, taxi_id) VALUES (?, ?)').run(driverId, driver.current_taxi_id);
@@ -27,7 +48,7 @@ router.post('/:driverId/shift/start', (req, res) => {
   res.json({ ok: true, taxi_id: driver.current_taxi_id });
 });
 
-router.post('/:driverId/shift/end', (req, res) => {
+router.post('/:driverId/shift/end', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
   if (!driver) return res.status(404).json({ error: 'driver not found' });
@@ -40,7 +61,7 @@ router.post('/:driverId/shift/end', (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/:driverId/location', (req, res) => {
+router.post('/:driverId/location', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const { lat, lng } = req.body;
   const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
@@ -57,7 +78,7 @@ router.post('/:driverId/location', (req, res) => {
   res.json({ ok: true });
 });
 
-router.post('/:driverId/trip', (req, res) => {
+router.post('/:driverId/trip', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const { fare } = req.body;
   const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
@@ -69,7 +90,7 @@ router.post('/:driverId/trip', (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-router.get('/:driverId/earnings', (req, res) => {
+router.get('/:driverId/earnings', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const earn = (clause) => db.prepare(`SELECT COALESCE(SUM(fare),0) as total, COUNT(*) as trips FROM trips WHERE driver_id = ? AND ${clause}`).get(driverId);
   res.json({
@@ -79,12 +100,12 @@ router.get('/:driverId/earnings', (req, res) => {
   });
 });
 
-router.get('/:driverId/messages', (req, res) => {
+router.get('/:driverId/messages', requireDriver, (req, res) => {
   const rows = db.prepare('SELECT * FROM messages WHERE driver_id = ? ORDER BY created_at DESC LIMIT 50').all(req.params.driverId);
   res.json(rows);
 });
 
-router.post('/:driverId/sos', (req, res) => {
+router.post('/:driverId/sos', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const { lat, lng } = req.body;
   const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);

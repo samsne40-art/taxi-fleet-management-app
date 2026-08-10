@@ -19,14 +19,14 @@
       <button id="tabRegister">Register</button>
     </div>
     <div id="loginForm">
-      <input id="loginPhone" placeholder="Phone number">
-      <input id="loginPassword" type="password" placeholder="Password">
+      <input id="loginPhone" placeholder="Phone number" autocomplete="username">
+      <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
       <button onclick="login()">Login</button>
     </div>
     <div id="registerForm" class="hidden">
       <input id="regName" placeholder="Your name">
-      <input id="regPhone" placeholder="Phone number">
-      <input id="regPassword" type="password" placeholder="Password">
+      <input id="regPhone" placeholder="Phone number" autocomplete="username">
+      <input id="regPassword" type="password" placeholder="Password (min 6 characters)" autocomplete="new-password">
       <button onclick="register()">Create owner account</button>
     </div>
     <div id="authError" class="alert hidden"></div>
@@ -68,9 +68,10 @@
       <h2>Register a driver</h2>
       <input id="drvName" placeholder="Driver name">
       <input id="drvPhone" placeholder="Phone number (used to log in)">
+      <input id="drvPassword" type="password" placeholder="Set driver's login password (min 6 characters)">
       <input id="drvLicense" placeholder="Driver's licence number">
       <input id="drvPdp" placeholder="PDP number">
-      <div class="muted" style="margin-bottom:10px;">Document uploads (licence / PDP / ID / selfie photos) are a next step for this prototype — see notes at the end of the build.</div>
+      <div class="muted" style="margin-bottom:10px;">The driver will use their phone number and this password to log in to the Driver app.</div>
       <button onclick="addDriver()">Add driver</button>
     </section>
 
@@ -95,7 +96,7 @@
   </div>
 
 </main>
-<footer class="tip">Prototype — plaintext auth, local SQLite. Not for production use as-is.</footer>
+<footer class="tip">Taxi Fleet Management — Owner Portal</footer>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/owner/app.js"></script>

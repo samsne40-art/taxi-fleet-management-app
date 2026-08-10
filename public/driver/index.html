@@ -13,11 +13,12 @@
 <main>
 
   <section id="authSection" class="card">
-    <h2>Login</h2>
-    <input id="loginPhone" placeholder="Your phone number">
+    <h2>Driver Login</h2>
+    <input id="loginPhone" placeholder="Your phone number" autocomplete="username">
+    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
     <button onclick="login()">Login</button>
     <div id="authError" class="alert hidden"></div>
-    <p class="muted">Your owner must register you first.</p>
+    <p class="muted">Your owner must register you and set your password first.</p>
   </section>
 
   <div id="app" class="hidden">
@@ -58,7 +59,7 @@
   </div>
 
 </main>
-<footer class="tip">Prototype — location is only shared while a shift is active.</footer>
+<footer class="tip">Taxi Fleet Management — Driver App · Location is only shared while a shift is active.</footer>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/driver/app.js"></script>

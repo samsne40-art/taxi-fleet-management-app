@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   owner_id INTEGER NOT NULL REFERENCES owners(id),
   name TEXT NOT NULL,
   phone TEXT UNIQUE NOT NULL,
+  password TEXT,
   license_no TEXT,
   pdp_no TEXT,
   status TEXT DEFAULT 'active',        -- active | suspended
@@ -88,5 +89,13 @@ CREATE TABLE IF NOT EXISTS sos_alerts (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 `);
+
+// Migration: add password column to drivers if it doesn't exist yet
+// (safe to run every startup — ALTER TABLE fails silently if column exists)
+try {
+  db.exec(`ALTER TABLE drivers ADD COLUMN password TEXT`);
+} catch (_) {
+  // column already exists — nothing to do
+}
 
 module.exports = db;

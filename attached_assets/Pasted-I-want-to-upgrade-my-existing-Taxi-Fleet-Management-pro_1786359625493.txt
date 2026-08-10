@@ -1,0 +1,67 @@
+I want to upgrade my existing Taxi Fleet Management prototype.
+
+IMPORTANT:
+Do not rebuild or delete the existing application.
+Do not remove any existing features.
+Work with the current project structure and preserve the current Owner, Driver and Passenger interfaces.
+
+For the next task, implement a proper authentication system.
+
+We need three user roles:
+
+1. OWNER
+2. DRIVER
+3. PASSENGER
+
+OWNER:
+- Owner can register with name, phone number and password.
+- Owner can log in.
+- Owner should only access Owner Mode.
+- Owner accounts should be stored securely in the database.
+
+DRIVER:
+- Driver accounts must be created by an Owner.
+- A Driver should log in using their assigned credentials.
+- Driver should only access Driver Mode.
+- Driver accounts must be linked to a specific taxi.
+
+PASSENGER:
+- Passenger should NOT need to create an account.
+- Passenger will later identify a taxi using its QR code or number plate.
+
+SECURITY:
+- Do not store plain-text passwords.
+- Use secure password hashing.
+- Use sessions or secure authentication tokens.
+- Protect Owner and Driver routes from unauthorized access.
+- Prevent a Driver from accessing Owner pages.
+- Prevent an unauthenticated user from accessing protected pages.
+
+DATABASE:
+- Use the existing database if possible.
+- Do not create a second unnecessary database.
+- Create/update the necessary user tables/models.
+- Keep the existing taxi, driver, rating and other data intact.
+
+UI:
+- Create a clean login screen.
+- Create an Owner registration screen.
+- Keep the existing design/style of the application.
+- Show clear error messages for incorrect login details.
+
+Before changing anything:
+1. Inspect the existing project.
+2. Explain which files you intend to modify.
+3. Check the current authentication/database implementation.
+4. Preserve all existing functionality.
+
+After implementing:
+1. Run the application.
+2. Test Owner registration.
+3. Test Owner login.
+4. Test Driver login.
+5. Test unauthorized access.
+6. Report any errors and fix them.
+
+Do not move on to GPS, payments or other features yet.
+Focus ONLY on authentication and role-based access.
