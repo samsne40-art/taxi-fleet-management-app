@@ -83,6 +83,8 @@ function boot() {
   document.getElementById('authSection').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
   document.getElementById('ownerName').textContent = `— ${owner.name}`;
+  const backBtn = document.getElementById('backBtn');
+  if (backBtn) backBtn.classList.add('hidden');
 
   socket = io({ withCredentials: true });
   socket.emit('join_owner_room', owner.id);

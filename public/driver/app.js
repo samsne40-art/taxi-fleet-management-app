@@ -65,6 +65,8 @@ function boot() {
   document.getElementById('authSection').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('driverName').textContent = `— ${driver.name}`;
+  const backBtn = document.getElementById('backBtn');
+  if (backBtn) backBtn.classList.add('hidden');
 
   socket = io({ withCredentials: true });
   socket.emit('join_driver_room', driver.id);

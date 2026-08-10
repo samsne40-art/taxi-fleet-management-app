@@ -27,8 +27,7 @@ app.use(session({
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Replit's preview opens the site root; send users to the primary app.
-app.get('/', (req, res) => res.redirect('/owner/'));
+// Root is served by express.static (public/index.html — mode-selection landing page).
 
 // ---------- Session helper routes ----------
 

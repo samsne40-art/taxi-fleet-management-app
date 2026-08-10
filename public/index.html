@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Taxi Fleet — Select Mode</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  /* ── Landing page overrides ─────────────────────────────── */
+  body { background: var(--green); min-height: 100vh; display: flex; flex-direction: column; }
+
+  .landing-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px 40px;
+    max-width: 480px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .landing-logo {
+    font-size: 56px;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+
+  .landing-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px;
+    text-align: center;
+  }
+
+  .landing-sub {
+    font-size: 13px;
+    color: rgba(255,255,255,0.75);
+    margin: 0 0 36px;
+    text-align: center;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+
+  .mode-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 20px 22px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    text-decoration: none;
+    color: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mode-btn:active { transform: scale(0.97); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+
+  .mode-icon {
+    font-size: 36px;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+  }
+
+  .mode-icon.owner   { background: #e4f6ea; }
+  .mode-icon.driver  { background: #fff8e6; }
+  .mode-icon.pax     { background: #eef4ff; }
+
+  .mode-text-wrap { flex: 1; }
+
+  .mode-label {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+    display: block;
+    letter-spacing: -0.2px;
+  }
+
+  .mode-desc {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 2px;
+    display: block;
+  }
+
+  .mode-arrow {
+    font-size: 20px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .landing-footer {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    padding: 16px 20px 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="landing-wrap">
+  <div class="landing-logo">🚐</div>
+  <h1 class="landing-title">Taxi Fleet</h1>
+  <p class="landing-sub">Select your role to continue</p>
+
+  <div class="mode-grid">
+
+    <a class="mode-btn" href="/owner/">
+      <div class="mode-icon owner">👤</div>
+      <div class="mode-text-wrap">
+        <span class="mode-label">Owner</span>
+        <span class="mode-desc">Manage your fleet, drivers &amp; earnings</span>
+      </div>
+      <span class="mode-arrow">›</span>
+    </a>
+
+    <a class="mode-btn" href="/driver/">
+      <div class="mode-icon driver">🚖</div>
+      <div class="mode-text-wrap">
+        <span class="mode-label">Driver</span>
+        <span class="mode-desc">Start your shift, log trips &amp; earnings</span>
+      </div>
+      <span class="mode-arrow">›</span>
+    </a>
+
+    <a class="mode-btn" href="/passenger/">
+      <div class="mode-icon pax">🎫</div>
+      <div class="mode-text-wrap">
+        <span class="mode-label">Passenger</span>
+        <span class="mode-desc">Rate a taxi or report an issue — no account needed</span>
+      </div>
+      <span class="mode-arrow">›</span>
+    </a>
+
+  </div>
+</div>
+
+<footer class="landing-footer">Taxi Fleet Management System</footer>
+
+</body>
+</html>
