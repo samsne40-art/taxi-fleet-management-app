@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Owner Dashboard — Taxi Fleet</title>
 <link rel="stylesheet" href="/style.css">
+<!-- Leaflet.js — OpenStreetMap, no API key required -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <header class="app-bar">
@@ -38,7 +41,20 @@
 
     <div id="sosBanner"></div>
 
-    <!-- Fleet Overview -->
+    <!-- ── Live Fleet ───────────────────────────────────────────────────── -->
+    <section class="card">
+      <h2>🟢 Live Fleet</h2>
+      <p class="muted" style="margin:0 0 10px;">Updated in real-time. Green = on duty and sharing location.</p>
+
+      <!-- Leaflet map -->
+      <div id="fleetMap" style="height:300px;border-radius:8px;overflow:hidden;margin-bottom:14px;background:#e5e5e5;"></div>
+
+      <!-- Fleet table -->
+      <div id="fleetList"></div>
+      <p class="muted" style="font-size:11px;margin-top:8px;" id="fleetUpdatedAt"></p>
+    </section>
+
+    <!-- Fleet Overview stats -->
     <section class="card">
       <h2>Fleet overview</h2>
       <div class="row">

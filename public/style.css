@@ -37,7 +37,7 @@ header.app-bar small { font-weight: 400; opacity: .85; font-size: 12px; }
   flex-shrink: 0;
 }
 .back-btn:hover { opacity: 1; }
-main { max-width: 760px; margin: 0 auto; padding: 16px; }
+main { max-width: 820px; margin: 0 auto; padding: 16px; }
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -46,7 +46,6 @@ main { max-width: 760px; margin: 0 auto; padding: 16px; }
   margin-bottom: 16px;
 }
 .card h2 { margin-top: 0; font-size: 16px; }
-.card h3 { font-size: 14px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; border-top: 1px solid var(--border); padding-top: 12px; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .stat {
   flex: 1 1 120px;
@@ -66,11 +65,7 @@ input, textarea, select, button {
   margin-bottom: 10px;
   font-family: inherit;
 }
-input[type="file"] {
-  padding: 8px;
-  background: var(--bg);
-  cursor: pointer;
-}
+input[type="file"] { padding: 8px; background: var(--bg); cursor: pointer; }
 button {
   background: var(--green);
   color: #fff;
@@ -84,41 +79,95 @@ button.warn { background: var(--amber); color: #1c1c1c; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── Badges ─────────────────────────────────────────────────────────────── */
-.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
-.badge.online   { background: #e4f6ea; color: var(--green); }
-.badge.offline  { background: #f1f1f1; color: var(--muted); }
-.badge.active   { background: #e4f6ea; color: var(--green); }
-.badge.approved { background: #e4f6ea; color: var(--green); }
-.badge.pending  { background: #fff8e6; color: #b07d00; }
-.badge.rejected { background: #fdeceb; color: var(--red); }
-.badge.suspended{ background: #fdeceb; color: var(--red); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.badge.online    { background: #e4f6ea; color: var(--green); }
+.badge.offline   { background: #f1f1f1; color: var(--muted); }
+.badge.active    { background: #e4f6ea; color: var(--green); }
+.badge.approved  { background: #e4f6ea; color: var(--green); }
+.badge.pending   { background: #fff8e6; color: #b07d00; }
+.badge.rejected  { background: #fdeceb; color: var(--red); }
+.badge.suspended { background: #fdeceb; color: var(--red); }
 
 /* ── Lists ──────────────────────────────────────────────────────────────── */
-.list-item {
-  border-bottom: 1px solid var(--border);
-  padding: 10px 0;
-}
+.list-item { border-bottom: 1px solid var(--border); padding: 10px 0; }
 .list-item:last-child { border-bottom: none; }
 .muted { color: var(--muted); font-size: 13px; }
-.stars { font-size: 20px; letter-spacing: 2px; cursor: pointer; user-select: none; }
-.star { color: #ddd; }
-.star.filled { color: var(--amber); }
 
-/* ── Driver card action buttons ─────────────────────────────────────────── */
-.driver-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-.driver-actions button {
-  width: auto;
-  padding: 5px 12px;
+/* ── Fleet table ────────────────────────────────────────────────────────── */
+.fleet-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
-  margin: 0;
+}
+.fleet-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.fleet-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.fleet-table tr:last-child td { border-bottom: none; }
+.fleet-table tr.fleet-row-online td { background: #f8fdf9; }
+.fleet-coord { font-family: monospace; font-size: 12px; color: var(--text); }
+
+/* Flash animation when a live location update arrives */
+@keyframes fleet-flash {
+  0%   { background: #d6f5e3; }
+  100% { background: transparent; }
+}
+.fleet-row-flash td { animation: fleet-flash 1.2s ease-out; }
+
+/* ── Driver shift section ───────────────────────────────────────────────── */
+.shift-status-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.shift-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  margin-bottom: 4px;
+}
+.shift-taxi-info {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--green);
+}
+.loc-detail {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.loc-status-msg {
+  font-size: 13px;
+  min-height: 18px;
 }
 
-/* ── Driver detail panel ─────────────────────────────────────────────────── */
+/* ── Driver card actions ────────────────────────────────────────────────── */
+.driver-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.driver-actions button { width: auto; padding: 5px 12px; font-size: 13px; margin: 0; }
+
+/* ── Driver detail panel ────────────────────────────────────────────────── */
 .driver-detail {
   background: var(--bg);
   border-radius: 8px;
@@ -127,7 +176,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   font-size: 14px;
 }
 .driver-detail p { margin: 4px 0; }
-.driver-detail strong { color: var(--text); }
 .doc-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .doc-link {
   display: inline-block;
@@ -149,7 +197,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   object-fit: cover;
 }
 
-/* ── Form section labels ────────────────────────────────────────────────── */
+/* ── Form labels ────────────────────────────────────────────────────────── */
 .form-section {
   font-size: 12px;
   font-weight: 700;
@@ -169,15 +217,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   margin-top: -4px;
 }
 
-/* ── Misc ───────────────────────────────────────────────────────────────── */
-.qr-box { text-align: center; }
+/* ── Tabs / Misc ────────────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
 .tabs button { width: auto; flex: 1; background: #fff; color: var(--text); border: 1px solid var(--border); }
 .tabs button.active { background: var(--green); color: #fff; border-color: var(--green); }
 .alert { background: #fdeceb; border: 1px solid var(--red); color: var(--red); padding: 10px; border-radius: 8px; margin-bottom: 10px; font-weight: 600; }
 .alert.info { background: #fff8e6; border-color: var(--amber); color: #7d5a00; }
 .hidden { display: none !important; }
-.checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.checkbox-row input { width: auto; margin: 0; }
-.checkbox-row label { font-size: 14px; }
 footer.tip { font-size: 12px; color: var(--muted); text-align: center; margin: 20px 0 40px; }
+.back-btn.hidden { display: none !important; }

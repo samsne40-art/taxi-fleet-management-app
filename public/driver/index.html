@@ -19,25 +19,42 @@
     <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
     <button onclick="login()">Login</button>
     <div id="authError" class="alert hidden"></div>
-    <p class="muted">Your owner must register you and set your password first.</p>
+    <p class="muted">Your owner must register and approve you before you can log in.</p>
   </section>
 
   <div id="app" class="hidden">
 
-    <section class="card">
-      <h2>Shift</h2>
-      <p>Status: <span id="shiftStatus" class="badge offline">off duty</span></p>
-      <button id="startBtn" onclick="startShift()">Start shift</button>
-      <button id="endBtn" class="secondary hidden" onclick="endShift()">End shift</button>
-      <p class="muted" id="locStatus"></p>
+    <!-- Work Shift -->
+    <section class="card" id="shiftCard">
+      <h2>Work Shift</h2>
+
+      <div class="shift-status-row">
+        <div>
+          <div class="shift-label">Duty status</div>
+          <span id="shiftStatus" class="badge offline">OFF DUTY</span>
+        </div>
+        <div>
+          <div class="shift-label">Location sharing</div>
+          <span id="gpsStatus" class="badge offline">INACTIVE</span>
+        </div>
+      </div>
+
+      <div id="taxiInfo" class="shift-taxi-info hidden"></div>
+
+      <div id="locDetail" class="loc-detail hidden">
+        <span id="locCoords"></span>
+        <span id="locAccuracy" class="muted"></span>
+      </div>
+
+      <div id="locStatusMsg" class="loc-status-msg muted"></div>
+
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <button id="startBtn" onclick="startShift()" style="flex:1;">▶ START SHIFT</button>
+        <button id="endBtn" class="danger hidden" onclick="endShift()" style="flex:1;">■ END SHIFT</button>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Record a trip / fare</h2>
-      <input id="fareInput" type="number" min="0" step="0.5" placeholder="Fare collected (R)">
-      <button onclick="logTrip()">Log trip</button>
-    </section>
-
+    <!-- Earnings -->
     <section class="card">
       <h2>Earnings</h2>
       <div class="row">
@@ -47,11 +64,20 @@
       </div>
     </section>
 
+    <!-- Record a trip -->
+    <section class="card">
+      <h2>Record a trip / fare</h2>
+      <input id="fareInput" type="number" min="0" step="0.5" placeholder="Fare collected (R)">
+      <button onclick="logTrip()">Log trip</button>
+    </section>
+
+    <!-- Messages -->
     <section class="card">
       <h2>Messages from owner</h2>
       <div id="messages"></div>
     </section>
 
+    <!-- SOS -->
     <section class="card">
       <button class="danger" onclick="sendSos()">🚨 SOS — send location to owner</button>
     </section>
@@ -60,7 +86,7 @@
   </div>
 
 </main>
-<footer class="tip">Taxi Fleet Management — Driver App · Location is only shared while a shift is active.</footer>
+<footer class="tip">Location is only shared while a shift is active.</footer>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/driver/app.js"></script>

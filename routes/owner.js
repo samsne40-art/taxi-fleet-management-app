@@ -238,6 +238,38 @@ router.post('/:ownerId/message', requireOwner, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Live Fleet ────────────────────────────────────────────────────────────────
+// Returns every driver belonging to this owner with their current location,
+// taxi plate, online/offline status, and shift timestamps.
+// Only the authenticated owner can call this; drivers cannot see each other.
+
+router.get('/:ownerId/fleet', requireOwner, (req, res) => {
+  const { ownerId } = req.params;
+
+  const rows = db.prepare(`
+    SELECT
+      d.id            AS driver_id,
+      d.name          AS driver_name,
+      d.verification_status,
+      t.id            AS taxi_id,
+      t.plate         AS taxi_plate,
+      t.status        AS taxi_status,
+      dl.lat,
+      dl.lng,
+      dl.updated_at   AS location_updated_at,
+      s.start_time    AS shift_start,
+      s.id            AS open_shift_id
+    FROM drivers d
+    LEFT JOIN taxis            t  ON t.id  = d.current_taxi_id
+    LEFT JOIN driver_locations dl ON dl.driver_id = d.id
+    LEFT JOIN shifts           s  ON s.driver_id  = d.id AND s.end_time IS NULL
+    WHERE d.owner_id = ?
+    ORDER BY t.status DESC, d.name ASC
+  `).all(ownerId);
+
+  res.json(rows);
+});
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 router.get('/:ownerId/dashboard', requireOwner, (req, res) => {
