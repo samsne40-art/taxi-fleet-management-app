@@ -13,6 +13,7 @@
 </header>
 <main>
 
+  <!-- ── AUTH ──────────────────────────────────────────────────────── -->
   <section id="authSection" class="card">
     <h2>Driver Login</h2>
     <input id="loginPhone" placeholder="Your phone number" autocomplete="username">
@@ -22,6 +23,7 @@
     <p class="muted">Your owner must register and approve you before you can log in.</p>
   </section>
 
+  <!-- ── APP (logged in) ───────────────────────────────────────────── -->
   <div id="app" class="hidden">
 
     <!-- Work Shift -->
@@ -54,21 +56,71 @@
       </div>
     </section>
 
+    <!-- Record Trip FAB — visible only while on duty -->
+    <button id="recordTripBtn" class="record-trip-fab hidden" onclick="openTripModal()">
+      ＋ RECORD TRIP
+    </button>
+
     <!-- Earnings -->
-    <section class="card">
-      <h2>Earnings</h2>
-      <div class="row">
-        <div class="stat"><div class="num" id="earnToday">R0</div><div class="label">Today</div></div>
-        <div class="stat"><div class="num" id="earnWeek">R0</div><div class="label">Week</div></div>
-        <div class="stat"><div class="num" id="earnMonth">R0</div><div class="label">Month</div></div>
+    <section class="card" id="earningsCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2 style="margin:0;font-size:16px;">💰 My Earnings</h2>
+        <button class="section-action-btn" onclick="loadEarnings()" style="font-size:12px;">↻ Refresh</button>
+      </div>
+
+      <div id="earningsBody">
+        <!-- Today -->
+        <div class="earn-period-row">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <div class="earn-period-label">Today</div>
+              <div class="earn-period-date" id="earnTodayDate">—</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="earn-period-amount" id="earnTodayTotal">R0</div>
+              <div class="earn-period-trips" id="earnTodayTrips">0 trips</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- This Week -->
+        <div class="earn-period-row">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <div class="earn-period-label">This Week</div>
+              <div class="earn-period-date" id="earnWeekDate">—</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="earn-period-amount" id="earnWeekTotal">R0</div>
+              <div class="earn-period-trips" id="earnWeekTrips">0 trips</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- This Month -->
+        <div class="earn-period-row" style="border-bottom:none;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <div class="earn-period-label">This Month</div>
+              <div class="earn-period-date" id="earnMonthDate">—</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="earn-period-amount" id="earnMonthTotal">R0</div>
+              <div class="earn-period-trips" id="earnMonthTrips">0 trips</div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Record a trip -->
-    <section class="card">
-      <h2>Record a trip / fare</h2>
-      <input id="fareInput" type="number" min="0" step="0.5" placeholder="Fare collected (R)">
-      <button onclick="logTrip()">Log trip</button>
+    <!-- Trip History -->
+    <section class="card" id="historyCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2 style="margin:0;font-size:16px;">📋 Trip History</h2>
+        <button class="section-action-btn" onclick="loadTripHistory()" style="font-size:12px;">↻ Refresh</button>
+      </div>
+      <div id="tripHistoryList"><p class="muted">No trips recorded yet.</p></div>
+      <button id="loadMoreTripsBtn" class="secondary hidden" onclick="loadMoreTrips()" style="margin-top:8px;font-size:13px;">Load more</button>
     </section>
 
     <!-- Messages -->
@@ -87,6 +139,39 @@
 
 </main>
 <footer class="tip">Location is only shared while a shift is active.</footer>
+
+<!-- ── TRIP RECORDING MODAL ───────────────────────────────────────── -->
+<div id="tripModal" class="modal-overlay hidden" onclick="modalBackdropClick(event)">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <h3>Record Trip</h3>
+      <button class="modal-close-btn" onclick="closeTripModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="field-label">📍 Starting point *</label>
+      <input id="tripFrom" placeholder="e.g. CBD, Park Station" autocomplete="off" style="margin-bottom:14px;">
+
+      <label class="field-label">🏁 Destination *</label>
+      <input id="tripTo" placeholder="e.g. Scottsville, Pietermaritzburg" autocomplete="off" style="margin-bottom:14px;">
+
+      <label class="field-label">R Fare collected *</label>
+      <input id="tripFare" type="number" min="1" step="0.50" placeholder="e.g. 30" style="margin-bottom:14px;">
+
+      <label class="field-label">Payment method</label>
+      <div class="payment-toggle">
+        <button id="pmCash"  class="pm-btn active" onclick="setPayment('CASH')">CASH</button>
+        <button id="pmEft"   class="pm-btn"         onclick="setPayment('EFT')">EFT</button>
+        <button id="pmOther" class="pm-btn"         onclick="setPayment('OTHER')">OTHER</button>
+      </div>
+
+      <div id="tripError" class="alert hidden"></div>
+      <div id="tripSuccess" class="trip-success hidden"></div>
+
+      <button id="tripSubmitBtn" onclick="submitTrip()" style="margin-top:8px;font-size:16px;padding:14px;font-weight:800;">✓ RECORD TRIP</button>
+      <button class="secondary" onclick="closeTripModal()" style="margin-top:6px;">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/driver/app.js"></script>

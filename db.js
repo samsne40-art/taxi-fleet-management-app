@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS sos_alerts (
 // ── Migrations (safe to run every startup) ───────────────────────────────────
 
 const migrations = [
+  // Driver table columns (added over time)
   `ALTER TABLE drivers ADD COLUMN password TEXT`,
   `ALTER TABLE drivers ADD COLUMN id_number TEXT`,
   `ALTER TABLE drivers ADD COLUMN license_expiry TEXT`,
@@ -101,10 +102,23 @@ const migrations = [
   `ALTER TABLE drivers ADD COLUMN license_doc_path TEXT`,
   `ALTER TABLE drivers ADD COLUMN pdp_doc_path TEXT`,
   `ALTER TABLE drivers ADD COLUMN verification_status TEXT`,
+  // Trips table enrichment — full trip recording
+  `ALTER TABLE trips ADD COLUMN owner_id INTEGER`,
+  `ALTER TABLE trips ADD COLUMN shift_id INTEGER`,
+  `ALTER TABLE trips ADD COLUMN from_location TEXT`,
+  `ALTER TABLE trips ADD COLUMN to_location TEXT`,
+  `ALTER TABLE trips ADD COLUMN payment_method TEXT DEFAULT 'CASH'`,
 ];
 for (const sql of migrations) {
-  try { db.exec(sql); } catch (_) { /* column already exists */ }
+  try { db.exec(sql); } catch (_) { /* column already exists — ignore */ }
 }
+
+// Backfill owner_id on existing trips that were recorded before this column existed.
+db.prepare(`
+  UPDATE trips
+  SET owner_id = (SELECT owner_id FROM taxis WHERE taxis.id = trips.taxi_id)
+  WHERE owner_id IS NULL AND taxi_id IS NOT NULL
+`).run();
 
 // Set verification_status for drivers created before this column existed.
 // Active → approved so existing working accounts keep working.

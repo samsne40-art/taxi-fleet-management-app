@@ -7,12 +7,11 @@ const fs = require('fs');
 const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
 const { requireOwner } = require('../middleware/auth');
+const { saToday, saWeekStart, saWeekEnd, saMonthStart, saMonthEnd, saMonthName } = require('../utils/time');
 
 const SALT_ROUNDS = 10;
 
 // ── Document upload configuration ───────────────────────────────────────────
-// Documents are stored in data/driver_docs/ — NOT inside the public/ folder,
-// so they are never served by Express static middleware.
 const DOCS_DIR = path.join(__dirname, '..', 'data', 'driver_docs');
 fs.mkdirSync(DOCS_DIR, { recursive: true });
 
@@ -25,7 +24,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per file
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
     if (allowed.includes(path.extname(file.originalname).toLowerCase())) cb(null, true);
@@ -83,7 +82,6 @@ router.post('/:ownerId/taxis', requireOwner, async (req, res) => {
   const { ownerId } = req.params;
   const { plate } = req.body;
   if (!plate) return res.status(400).json({ error: 'plate required' });
-  // qr_token kept for DB integrity (NOT NULL constraint); not exposed to clients.
   const qrToken = uuidv4();
   try {
     const info = db.prepare('INSERT INTO taxis (owner_id, plate, qr_token) VALUES (?, ?, ?)').run(ownerId, plate.toUpperCase().trim(), qrToken);
@@ -105,7 +103,6 @@ router.get('/:ownerId/taxis', requireOwner, (req, res) => {
 
 // ── Drivers ──────────────────────────────────────────────────────────────────
 
-// Create a new driver (multipart/form-data for document uploads)
 router.post('/:ownerId/drivers', requireOwner, driverUpload, async (req, res) => {
   const { ownerId } = req.params;
   const {
@@ -143,7 +140,6 @@ router.post('/:ownerId/drivers', requireOwner, driverUpload, async (req, res) =>
     );
     res.json({ id: info.lastInsertRowid, name, phone, verification_status: 'pending' });
   } catch (e) {
-    // Clean up any uploaded files on error
     [licenseDocFile, pdpDocFile, selfieFile].forEach((f) => {
       if (f) fs.unlink(path.join(DOCS_DIR, f.filename), () => {});
     });
@@ -152,7 +148,6 @@ router.post('/:ownerId/drivers', requireOwner, driverUpload, async (req, res) =>
   }
 });
 
-// Get all drivers for this owner (summary — no sensitive doc paths)
 router.get('/:ownerId/drivers', requireOwner, (req, res) => {
   const drivers = db.prepare(`
     SELECT d.id, d.name, d.phone, d.license_no, d.pdp_no,
@@ -167,7 +162,6 @@ router.get('/:ownerId/drivers', requireOwner, (req, res) => {
   res.json(drivers);
 });
 
-// Get single driver details (for owner verification view — no passwords)
 router.get('/:ownerId/drivers/:driverId', requireOwner, (req, res) => {
   const driver = db.prepare(`
     SELECT d.id, d.name, d.phone, d.id_number,
@@ -186,7 +180,6 @@ router.get('/:ownerId/drivers/:driverId', requireOwner, (req, res) => {
   res.json(driver);
 });
 
-// Serve a driver document — authenticated owners only, never exposed publicly
 router.get('/:ownerId/drivers/:driverId/document/:field', requireOwner, (req, res) => {
   const { driverId, field } = req.params;
   const allowed = ['license_doc_path', 'pdp_doc_path', 'selfie_path'];
@@ -201,7 +194,6 @@ router.get('/:ownerId/drivers/:driverId/document/:field', requireOwner, (req, re
   });
 });
 
-// Set verification status (approve / reject / suspend / pending)
 router.post('/:ownerId/drivers/:driverId/verify', requireOwner, (req, res) => {
   const { driverId } = req.params;
   const { status } = req.body;
@@ -212,14 +204,10 @@ router.post('/:ownerId/drivers/:driverId/verify', requireOwner, (req, res) => {
   if (!driver) return res.status(404).json({ error: 'driver not found' });
 
   db.prepare('UPDATE drivers SET verification_status = ? WHERE id = ?').run(status, driverId);
-
-  // Notify the driver via socket if they happen to be connected
   req.app.locals.io.to(`driver_${driverId}`).emit('verification_update', { status });
-
   res.json({ ok: true, verification_status: status });
 });
 
-// Assign a taxi to a driver
 router.post('/:ownerId/drivers/:driverId/assign', requireOwner, (req, res) => {
   const { driverId } = req.params;
   const { taxi_id } = req.body;
@@ -239,9 +227,6 @@ router.post('/:ownerId/message', requireOwner, (req, res) => {
 });
 
 // ── Live Fleet ────────────────────────────────────────────────────────────────
-// Returns every driver belonging to this owner with their current location,
-// taxi plate, online/offline status, and shift timestamps.
-// Only the authenticated owner can call this; drivers cannot see each other.
 
 router.get('/:ownerId/fleet', requireOwner, (req, res) => {
   const { ownerId } = req.params;
@@ -275,23 +260,28 @@ router.get('/:ownerId/fleet', requireOwner, (req, res) => {
 router.get('/:ownerId/dashboard', requireOwner, (req, res) => {
   const { ownerId } = req.params;
 
-  const taxis = db.prepare('SELECT * FROM taxis WHERE owner_id = ?').all(ownerId);
+  const taxis   = db.prepare('SELECT * FROM taxis WHERE owner_id = ?').all(ownerId);
   const taxiIds = taxis.map((t) => t.id);
-  const online = taxis.filter((t) => t.status === 'online').length;
+  const online  = taxis.filter((t) => t.status === 'online').length;
 
   const locations = taxiIds.length
     ? db.prepare(`SELECT * FROM driver_locations WHERE taxi_id IN (${taxiIds.map(() => '?').join(',')})`).all(...taxiIds)
     : [];
 
-  const earn = (period) => {
-    if (!taxiIds.length) return 0;
-    const clause = {
-      today: "date(created_at) = date('now')",
-      week:  "created_at >= date('now','-7 days')",
-      month: "created_at >= date('now','-30 days')",
-    }[period];
+  // Earnings using SAST-adjusted date for "today"
+  const todayEarn = (() => {
+    if (!taxiIds.length) return { total: 0, trips: 0 };
     return db.prepare(
-      `SELECT COALESCE(SUM(fare),0) as total FROM trips WHERE taxi_id IN (${taxiIds.map(() => '?').join(',')}) AND ${clause}`
+      `SELECT COALESCE(SUM(fare),0) AS total, COUNT(*) AS trips
+       FROM trips WHERE taxi_id IN (${taxiIds.map(() => '?').join(',')})
+       AND date(created_at,'+2 hours') = date('now','+2 hours')`
+    ).get(...taxiIds);
+  })();
+
+  const earn = (clause) => {
+    if (!taxiIds.length) return 0;
+    return db.prepare(
+      `SELECT COALESCE(SUM(fare),0) AS total FROM trips WHERE taxi_id IN (${taxiIds.map(() => '?').join(',')}) AND ${clause}`
     ).get(...taxiIds).total;
   };
 
@@ -307,7 +297,6 @@ router.get('/:ownerId/dashboard', requireOwner, (req, res) => {
     `SELECT s.*, d.name as driver_name FROM sos_alerts s JOIN drivers d ON d.id = s.driver_id WHERE d.owner_id = ? AND s.resolved = 0 ORDER BY s.created_at DESC`
   ).all(ownerId);
 
-  // Drivers with expiring documents (within next 60 days)
   const expiringDocs = db.prepare(`
     SELECT id, name, license_expiry, pdp_expiry FROM drivers
     WHERE owner_id = ? AND verification_status = 'approved'
@@ -319,17 +308,156 @@ router.get('/:ownerId/dashboard', requireOwner, (req, res) => {
   `).all(ownerId);
 
   res.json({
-    taxisOnline: online,
+    taxisOnline:  online,
     taxisOffline: taxis.length - online,
-    totalTaxis: taxis.length,
+    totalTaxis:   taxis.length,
     liveLocations: locations,
-    earnings: { today: earn('today'), week: earn('week'), month: earn('month') },
+    earnings: {
+      today:      todayEarn.total,
+      tripsToday: todayEarn.trips,
+      week:       earn("created_at >= date('now','-7 days')"),
+      month:      earn("created_at >= date('now','-30 days')"),
+    },
     avgRating: avgRatingRow.avg,
     complaints,
     activeSos,
     expiringDocs,
   });
 });
+
+// ── Owner Earnings — full breakdown with filtering ────────────────────────────
+
+router.get('/:ownerId/earnings', requireOwner, (req, res) => {
+  const ownerId = req.params.ownerId;
+  const { start_date, end_date, driver_id, taxi_id } = req.query;
+
+  const today      = saToday();
+  const weekStart  = saWeekStart();
+  const weekEnd    = saWeekEnd();
+  const monthStart = saMonthStart();
+  const monthEnd   = saMonthEnd();
+
+  // The period used for breakdowns — defaults to current month if not specified
+  const periodStart = start_date || monthStart;
+  const periodEnd   = end_date   || monthEnd;
+
+  // Generic aggregate for a date range (respects driver/taxi filters)
+  const aggregate = (s, e) => {
+    const params = [ownerId, s, e];
+    let extra = '';
+    if (driver_id) { extra += ' AND t.driver_id=?'; params.push(driver_id); }
+    if (taxi_id)   { extra += ' AND t.taxi_id=?';   params.push(taxi_id); }
+    return db.prepare(`
+      SELECT COALESCE(SUM(t.fare),0) AS total, COUNT(*) AS trips,
+             CASE WHEN COUNT(*)>0 THEN ROUND(SUM(t.fare)/COUNT(*),2) ELSE 0 END AS avg_fare
+      FROM trips t
+      WHERE t.owner_id=?
+        AND date(t.created_at,'+2 hours') >= ?
+        AND date(t.created_at,'+2 hours') <= ?
+        ${extra}
+    `).get(...params);
+  };
+
+  // Per-driver breakdown (filtered by taxi if provided, grouped by driver)
+  const pdParams = [ownerId, periodStart, periodEnd];
+  const pdTaxiEx = taxi_id ? ' AND t.taxi_id=?' : '';
+  if (taxi_id) pdParams.push(taxi_id);
+  pdParams.push(parseInt(ownerId));
+  const byDriver = db.prepare(`
+    SELECT d.id AS driver_id, d.name AS driver_name,
+           COALESCE(SUM(t.fare),0) AS total, COUNT(t.id) AS trips,
+           CASE WHEN COUNT(t.id)>0 THEN ROUND(SUM(t.fare)/COUNT(t.id),2) ELSE 0 END AS avg_fare
+    FROM drivers d
+    LEFT JOIN trips t ON t.driver_id=d.id AND t.owner_id=?
+      AND date(t.created_at,'+2 hours')>=? AND date(t.created_at,'+2 hours')<=?
+      ${pdTaxiEx}
+    WHERE d.owner_id=?
+    GROUP BY d.id
+    ORDER BY total DESC
+  `).all(...pdParams);
+
+  // Per-taxi breakdown (filtered by driver if provided, grouped by taxi)
+  const ptParams = [ownerId, periodStart, periodEnd];
+  const ptDriverEx = driver_id ? ' AND t.driver_id=?' : '';
+  if (driver_id) ptParams.push(driver_id);
+  ptParams.push(parseInt(ownerId));
+  const byTaxi = db.prepare(`
+    SELECT tx.id AS taxi_id, tx.plate AS taxi_plate,
+           COALESCE(SUM(t.fare),0) AS total, COUNT(t.id) AS trips,
+           CASE WHEN COUNT(t.id)>0 THEN ROUND(SUM(t.fare)/COUNT(t.id),2) ELSE 0 END AS avg_fare
+    FROM taxis tx
+    LEFT JOIN trips t ON t.taxi_id=tx.id AND t.owner_id=?
+      AND date(t.created_at,'+2 hours')>=? AND date(t.created_at,'+2 hours')<=?
+      ${ptDriverEx}
+    WHERE tx.owner_id=?
+    GROUP BY tx.id
+    ORDER BY total DESC
+  `).all(...ptParams);
+
+  // Daily totals for the period
+  const dtParams = [ownerId, periodStart, periodEnd];
+  let dtExtra = '';
+  if (driver_id) { dtExtra += ' AND t.driver_id=?'; dtParams.push(driver_id); }
+  if (taxi_id)   { dtExtra += ' AND t.taxi_id=?';   dtParams.push(taxi_id); }
+  const dailyTotals = db.prepare(`
+    SELECT date(t.created_at,'+2 hours') AS sa_date,
+           COALESCE(SUM(t.fare),0) AS total, COUNT(*) AS trips
+    FROM trips t
+    WHERE t.owner_id=?
+      AND date(t.created_at,'+2 hours') >= ?
+      AND date(t.created_at,'+2 hours') <= ?
+      ${dtExtra}
+    GROUP BY sa_date
+    ORDER BY sa_date DESC
+  `).all(...dtParams);
+
+  res.json({
+    today:  { date: today,      ...aggregate(today, today)                 },
+    week:   { start: weekStart,  end: weekEnd,    ...aggregate(weekStart, weekEnd)    },
+    month:  { name: saMonthName(), start: monthStart, end: monthEnd, ...aggregate(monthStart, monthEnd) },
+    period: { start: periodStart, end: periodEnd, ...aggregate(periodStart, periodEnd) },
+    byDriver,
+    byTaxi,
+    dailyTotals,
+  });
+});
+
+// ── Owner Trip History — filterable ──────────────────────────────────────────
+
+router.get('/:ownerId/trips', requireOwner, (req, res) => {
+  const ownerId = req.params.ownerId;
+  const { driver_id, taxi_id, date, start_date, end_date, payment_method } = req.query;
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+
+  const params = [ownerId];
+  let extra = '';
+
+  if (driver_id)      { extra += ' AND t.driver_id=?';                                                   params.push(driver_id); }
+  if (taxi_id)        { extra += ' AND t.taxi_id=?';                                                      params.push(taxi_id); }
+  if (payment_method) { extra += ' AND t.payment_method=?';                                               params.push(payment_method.toUpperCase()); }
+  if (date) {
+    extra += " AND date(t.created_at,'+2 hours')=?"; params.push(date);
+  } else if (start_date && end_date) {
+    extra += " AND date(t.created_at,'+2 hours')>=? AND date(t.created_at,'+2 hours')<=?";
+    params.push(start_date, end_date);
+  }
+
+  const rows = db.prepare(`
+    SELECT t.id, t.fare, t.from_location, t.to_location, t.payment_method, t.created_at,
+           d.name  AS driver_name,
+           tx.plate AS taxi_plate
+    FROM trips t
+    LEFT JOIN drivers d  ON d.id  = t.driver_id
+    LEFT JOIN taxis   tx ON tx.id = t.taxi_id
+    WHERE t.owner_id=? ${extra}
+    ORDER BY t.created_at DESC
+    LIMIT ${limit}
+  `).all(...params);
+
+  res.json(rows);
+});
+
+// ── Feedback ──────────────────────────────────────────────────────────────────
 
 router.get('/:ownerId/feedback', requireOwner, (req, res) => {
   const rows = db.prepare(`

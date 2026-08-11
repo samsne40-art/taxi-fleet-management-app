@@ -207,9 +207,16 @@
         </div>
 
         <div class="card" style="margin-top:12px;">
-          <h3 class="card-subh">Today's earnings</h3>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h3 class="card-subh" style="margin:0;">Earnings summary</h3>
+            <button class="section-action-btn" onclick="showSection('earnings')" style="font-size:12px;padding:5px 10px;">Full report →</button>
+          </div>
           <div class="ov-earn-row">
-            <div class="stat"><div class="num" id="ovEarnToday">R–</div><div class="label">Today</div></div>
+            <div class="stat">
+              <div class="num" id="ovEarnToday">R–</div>
+              <div style="font-size:11px;color:var(--green);font-weight:700;margin-top:1px;" id="ovTripsToday">– trips</div>
+              <div class="label">Today</div>
+            </div>
             <div class="stat"><div class="num" id="ovEarnWeek">R–</div><div class="label">This week</div></div>
             <div class="stat"><div class="num" id="ovEarnMonth">R–</div><div class="label">This month</div></div>
           </div>
@@ -328,33 +335,83 @@
       <div class="section-hdr">
         <button class="section-back" onclick="showHome()">&#8592; Home</button>
         <h2 class="section-title">💰 Earnings</h2>
+        <button class="section-action-btn" onclick="loadEarnings()">↻</button>
       </div>
 
       <div class="sp-body">
-        <div class="card">
-          <h3 class="card-subh">Trip revenue</h3>
-          <div class="row">
-            <div class="stat"><div class="num" id="earnToday">R0</div><div class="label">Today</div></div>
-            <div class="stat"><div class="num" id="earnWeek">R0</div><div class="label">This week</div></div>
-            <div class="stat"><div class="num" id="earnMonth">R0</div><div class="label">This month</div></div>
+
+        <!-- Period tabs -->
+        <div class="earn-tabs">
+          <button class="earn-tab active" id="etToday"  onclick="setEarnTab('today')">Today</button>
+          <button class="earn-tab"        id="etWeek"   onclick="setEarnTab('week')">Week</button>
+          <button class="earn-tab"        id="etMonth"  onclick="setEarnTab('month')">Month</button>
+          <button class="earn-tab"        id="etCustom" onclick="setEarnTab('custom')">Custom</button>
+        </div>
+
+        <!-- Custom date range (shown only on Custom tab) -->
+        <div id="earnCustomPanel" class="card hidden">
+          <h3 class="card-subh">Select date range</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:130px;">
+              <label class="field-label">From</label>
+              <input type="date" id="earnFromDate" style="margin:0;">
+            </div>
+            <div style="flex:1;min-width:130px;">
+              <label class="field-label">To</label>
+              <input type="date" id="earnToDate" style="margin:0;">
+            </div>
+          </div>
+          <button onclick="applyEarnCustom()" style="margin-top:10px;">Apply</button>
+        </div>
+
+        <!-- Summary card for selected period -->
+        <div class="card earn-summary-card">
+          <div class="earn-period-lbl" id="earnPeriodLbl">Loading…</div>
+          <div class="earn-big-total"  id="earnBigTotal">R–</div>
+          <div class="earn-meta-row">
+            <span><strong id="earnTripCount">–</strong> trips</span>
+            <span>Avg <strong id="earnAvgFare">R–</strong></span>
           </div>
         </div>
 
-        <div class="card">
-          <h3 class="card-subh">Fleet stats</h3>
-          <div class="row">
-            <div class="stat"><div class="num" id="statOnline">0</div><div class="label">Taxis online</div></div>
-            <div class="stat"><div class="num" id="statOffline">0</div><div class="label">Offline</div></div>
-            <div class="stat"><div class="num" id="statRating">–</div><div class="label">Avg rating</div></div>
-            <div class="stat"><div class="num" id="statComplaints">0</div><div class="label">Complaints</div></div>
+        <!-- Filters: driver and taxi -->
+        <div class="card" style="padding:12px 14px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="earnFilterDriver" onchange="applyEarnFilters()"
+                    style="flex:1;min-width:130px;margin:0;font-size:13px;padding:8px;">
+              <option value="">All drivers</option>
+            </select>
+            <select id="earnFilterTaxi" onchange="applyEarnFilters()"
+                    style="flex:1;min-width:130px;margin:0;font-size:13px;padding:8px;">
+              <option value="">All taxis</option>
+            </select>
           </div>
         </div>
 
-        <div class="card coming-soon-card">
-          <p class="coming-soon-icon">📈</p>
-          <p class="coming-soon-title">Per-driver earnings breakdown</p>
-          <p class="muted">Coming in a future update</p>
+        <!-- By Driver -->
+        <div class="card">
+          <h3 class="card-subh">By Driver</h3>
+          <div id="earnByDriver"><p class="muted">Loading…</p></div>
         </div>
+
+        <!-- By Taxi -->
+        <div class="card">
+          <h3 class="card-subh">By Taxi</h3>
+          <div id="earnByTaxi"><p class="muted">Loading…</p></div>
+        </div>
+
+        <!-- Daily Totals -->
+        <div class="card">
+          <h3 class="card-subh">Daily totals</h3>
+          <div id="earnDailyTotals"><p class="muted">Loading…</p></div>
+        </div>
+
+        <!-- Trip History list -->
+        <div class="card">
+          <h3 class="card-subh">Trip history</h3>
+          <div id="earnTripList"><p class="muted">Loading…</p></div>
+        </div>
+
       </div>
     </section>
 

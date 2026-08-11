@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireDriver } = require('../middleware/auth');
+const { saToday, saWeekStart, saWeekEnd, saMonthStart, saMonthEnd, saMonthName } = require('../utils/time');
 
 // ── Auth (public) ────────────────────────────────────────────────────────────
 
@@ -142,17 +143,113 @@ router.post('/:driverId/location', requireDriver, (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Earnings ──────────────────────────────────────────────────────────────────
+// ── Trip recording ────────────────────────────────────────────────────────────
+
+router.post('/:driverId/trip', requireDriver, (req, res) => {
+  const driverId = req.session.userId;
+  const { from_location, to_location, fare, payment_method } = req.body;
+
+  // Validate required fields
+  const from = (from_location || '').trim();
+  const to   = (to_location   || '').trim();
+  if (!from) return res.status(400).json({ error: 'Starting point is required' });
+  if (!to)   return res.status(400).json({ error: 'Destination is required' });
+
+  const fareNum = parseFloat(fare);
+  if (fare == null || isNaN(fareNum) || fareNum <= 0)
+    return res.status(400).json({ error: 'Fare must be a positive number (R)' });
+
+  const VALID_PAYMENTS = ['CASH', 'EFT', 'OTHER'];
+  const payment = ((payment_method || 'CASH') + '').trim().toUpperCase();
+  if (!VALID_PAYMENTS.includes(payment))
+    return res.status(400).json({ error: 'Payment method must be CASH, EFT, or OTHER' });
+
+  const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
+  if (!driver) return res.status(404).json({ error: 'Driver not found' });
+  if (!driver.current_taxi_id)
+    return res.status(400).json({ error: 'No taxi assigned — ask your owner to assign you a taxi' });
+
+  // Require an active (open) shift — driver must be ON DUTY
+  const openShift = db.prepare(
+    'SELECT id FROM shifts WHERE driver_id = ? AND end_time IS NULL LIMIT 1'
+  ).get(driverId);
+  if (!openShift)
+    return res.status(409).json({ error: 'You must be on duty to record a trip. Start your shift first.' });
+
+  // All checks passed — insert trip. created_at is UTC server time (SQLite default).
+  const info = db.prepare(`
+    INSERT INTO trips (owner_id, driver_id, taxi_id, shift_id, from_location, to_location, fare, payment_method)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(driver.owner_id, driverId, driver.current_taxi_id, openShift.id, from, to, fareNum, payment);
+
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+// ── Driver trip history ───────────────────────────────────────────────────────
+
+router.get('/:driverId/trips', requireDriver, (req, res) => {
+  const driverId = req.session.userId;
+  const { date, start_date, end_date } = req.query;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+
+  const params = [driverId];
+  let extra = '';
+
+  if (date) {
+    extra += " AND date(t.created_at,'+2 hours') = ?";
+    params.push(date);
+  } else if (start_date && end_date) {
+    extra += " AND date(t.created_at,'+2 hours') >= ? AND date(t.created_at,'+2 hours') <= ?";
+    params.push(start_date, end_date);
+  }
+
+  const rows = db.prepare(`
+    SELECT t.id, t.from_location, t.to_location, t.fare, t.payment_method, t.created_at,
+           tx.plate AS taxi_plate
+    FROM trips t
+    LEFT JOIN taxis tx ON tx.id = t.taxi_id
+    WHERE t.driver_id = ? ${extra}
+    ORDER BY t.created_at DESC LIMIT ${limit}
+  `).all(...params);
+
+  res.json(rows);
+});
+
+// ── Driver earnings — proper SAST periods ────────────────────────────────────
 
 router.get('/:driverId/earnings', requireDriver, (req, res) => {
   const driverId = req.session.userId;
-  const earn = (clause) => db.prepare(
-    `SELECT COALESCE(SUM(fare),0) as total, COUNT(*) as trips FROM trips WHERE driver_id = ? AND ${clause}`
-  ).get(driverId);
+
+  const today      = saToday();
+  const weekStart  = saWeekStart();
+  const weekEnd    = saWeekEnd();
+  const monthStart = saMonthStart();
+  const monthEnd   = saMonthEnd();
+
+  const agg = (s, e) => db.prepare(`
+    SELECT COALESCE(SUM(fare), 0) AS total, COUNT(*) AS trips
+    FROM trips
+    WHERE driver_id = ?
+      AND date(created_at, '+2 hours') >= ?
+      AND date(created_at, '+2 hours') <= ?
+  `).get(driverId, s, e);
+
   res.json({
-    today: earn("date(created_at) = date('now')"),
-    week:  earn("created_at >= date('now','-7 days')"),
-    month: earn("created_at >= date('now','-30 days')"),
+    today: {
+      date: today,
+      ...agg(today, today),
+    },
+    week: {
+      start: weekStart,
+      end:   weekEnd,
+      ...agg(weekStart, weekEnd),
+    },
+    month: {
+      name:  saMonthName(),
+      start: monthStart,
+      end:   monthEnd,
+      ...agg(monthStart, monthEnd),
+    },
   });
 });
 
@@ -164,19 +261,6 @@ router.get('/:driverId/messages', requireDriver, (req, res) => {
     'SELECT * FROM messages WHERE driver_id = ? ORDER BY created_at DESC LIMIT 50'
   ).all(driverId);
   res.json(rows);
-});
-
-// ── Trip logging ──────────────────────────────────────────────────────────────
-
-router.post('/:driverId/trip', requireDriver, (req, res) => {
-  const driverId = req.session.userId;
-  const { fare } = req.body;
-  const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
-  if (!driver) return res.status(404).json({ error: 'driver not found' });
-  if (!driver.current_taxi_id) return res.status(400).json({ error: 'no taxi assigned' });
-  if (fare == null || isNaN(fare)) return res.status(400).json({ error: 'valid fare required' });
-  const info = db.prepare('INSERT INTO trips (taxi_id, driver_id, fare) VALUES (?, ?, ?)').run(driver.current_taxi_id, driverId, fare);
-  res.json({ ok: true, id: info.lastInsertRowid });
 });
 
 // ── SOS ───────────────────────────────────────────────────────────────────────

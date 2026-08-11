@@ -6,6 +6,12 @@ let socket = null;
 let dashboardData = null;
 let driversData   = null;
 
+// Earnings section state
+let earnTab         = 'today';
+let earnData        = null;
+let earnCustomStart = null;
+let earnCustomEnd   = null;
+
 // ════════════════════════════════════════════════════ SECTION NAVIGATION ══
 
 let activeSection = null;
@@ -23,19 +29,14 @@ const SECTION_LOADERS = {
 };
 
 function showSection(id) {
-  // Hide control centre
   document.getElementById('controlCentre').classList.add('hidden');
-  // Hide all panels
   document.querySelectorAll('.section-panel').forEach((p) => p.classList.add('hidden'));
-  // Show target
   const panel = document.getElementById(`section-${id}`);
   if (panel) panel.classList.remove('hidden');
   activeSection = id;
-  // Mark active sidebar button
   document.querySelectorAll('.snav-btn').forEach((b) => b.classList.remove('snav-active'));
   const sidebarBtn = document.querySelector(`.snav-btn[onclick="showSection('${id}')"]`);
   if (sidebarBtn) sidebarBtn.classList.add('snav-active');
-  // Load section data
   SECTION_LOADERS[id]?.();
 }
 
@@ -45,7 +46,6 @@ function showHome() {
   const cc = document.getElementById('controlCentre');
   cc.classList.remove('hidden');
   activeSection = null;
-  // Refresh quick stats bar
   refreshCCStats();
 }
 
@@ -60,9 +60,9 @@ function switchTab(which) {
 }
 
 function showAuthError(msg) {
-  const el = document.getElementById('authError');
-  el.textContent = msg;
-  el.classList.remove('hidden');
+  const e = document.getElementById('authError');
+  e.textContent = msg;
+  e.classList.remove('hidden');
 }
 
 async function register() {
@@ -113,35 +113,30 @@ async function restoreSession() {
 }
 
 function boot() {
-  // Show app, hide auth
   document.getElementById('authScreen').classList.add('hidden');
   document.getElementById('ownerApp').classList.remove('hidden');
 
-  // Set name placeholders
   document.getElementById('sidebarName').textContent  = owner.name;
   document.getElementById('ccName').textContent       = owner.name;
   document.getElementById('ccGreeting').textContent   = greeting();
 
-  // Socket.io
   socket = io({ withCredentials: true });
   socket.emit('join_owner_room', owner.id);
 
-  socket.on('location_update', (data) => {
-    updateFleetRow(data);
-  });
+  socket.on('location_update', (data) => { updateFleetRow(data); });
   socket.on('taxi_status', () => {
     loadFleet();
-    if (activeSection === 'taxis')         loadTaxis();
-    if (activeSection === 'overview')      loadDashboard().then(renderOverview);
-    if (activeSection === 'earnings')      loadDashboard();
+    if (activeSection === 'taxis')    loadTaxis();
+    if (activeSection === 'overview') loadDashboard().then(renderOverview);
+    if (activeSection === 'earnings') loadEarnings();
     refreshCCStats();
   });
   socket.on('new_feedback', (fb) => {
     if (activeSection === 'feedback') prependFeedback(fb);
   });
   socket.on('new_complaint', () => {
-    if (activeSection === 'overview')   loadDashboard().then(renderOverview);
-    if (activeSection === 'feedback')   loadFeedback();
+    if (activeSection === 'overview') loadDashboard().then(renderOverview);
+    if (activeSection === 'feedback') loadFeedback();
   });
   socket.on('sos_alert', (alert) => {
     showSosBanner(alert);
@@ -149,27 +144,13 @@ function boot() {
     setBadge('notifications', getActiveSosCount() + 1);
   });
 
-  // Load dashboard immediately (powers SOS banner + CC stats)
-  loadDashboard().then(() => {
-    refreshCCStats();
-  });
+  loadDashboard().then(() => { refreshCCStats(); });
 
-  // Periodic refresh
-  setInterval(() => {
-    if (!owner) return;
-    loadDashboard().then(() => refreshCCStats());
-  }, 15000);
-  setInterval(() => {
-    if (owner && activeSection === 'fleet') loadFleet();
-  }, 20000);
+  setInterval(() => { if (!owner) return; loadDashboard().then(() => refreshCCStats()); }, 15000);
+  setInterval(() => { if (owner && activeSection === 'fleet') loadFleet(); }, 20000);
 
-  // Determine start screen
   const isDesktop = window.matchMedia('(min-width: 768px)').matches;
-  if (isDesktop) {
-    showSection('overview');
-  } else {
-    showHome();
-  }
+  if (isDesktop) { showSection('overview'); } else { showHome(); }
   window.matchMedia('(min-width: 768px)').addEventListener('change', (e) => {
     if (e.matches && !activeSection) showSection('overview');
   });
@@ -179,7 +160,6 @@ function boot() {
 
 async function enterOverview() {
   await loadDashboard();
-  // Also get driver counts (reuse cached if fresh)
   if (!driversData) await loadDrivers();
   renderOverview();
 }
@@ -194,8 +174,12 @@ function renderOverview() {
   el('ovEarnToday').textContent  = 'R' + d.earnings.today.toFixed(0);
   el('ovEarnWeek').textContent   = 'R' + d.earnings.week.toFixed(0);
   el('ovEarnMonth').textContent  = 'R' + d.earnings.month.toFixed(0);
+  // Today's trip count
+  if (el('ovTripsToday')) {
+    const n = d.earnings.tripsToday || 0;
+    el('ovTripsToday').textContent = n + (n === 1 ? ' trip' : ' trips');
+  }
 
-  // Driver counts from cached data
   if (driversData) {
     const approved = driversData.filter((x) => x.verification_status === 'approved').length;
     const pending  = driversData.filter((x) => x.verification_status === 'pending').length;
@@ -205,7 +189,6 @@ function renderOverview() {
     setBadge('drivers', pending);
   }
 
-  // Expiring docs
   if (d.expiringDocs && d.expiringDocs.length > 0) {
     el('ovExpiringWrap').classList.remove('hidden');
     el('ovExpiringList').innerHTML = d.expiringDocs.map((x) =>
@@ -218,7 +201,6 @@ function renderOverview() {
     el('ovExpiringWrap').classList.add('hidden');
   }
 
-  // SOS list
   if (d.activeSos && d.activeSos.length > 0) {
     el('ovSosList').classList.remove('hidden');
     el('ovSosList').innerHTML = d.activeSos.map((a) =>
@@ -232,17 +214,14 @@ function renderOverview() {
   }
 }
 
-async function enterTaxis() {
-  await loadTaxis();
-}
+async function enterTaxis()  { await loadTaxis(); }
 
 async function enterDrivers() {
-  await loadTaxis();       // needed for assign dropdowns
+  await loadTaxis();
   await loadDrivers();
 }
 
 function enterFleet() {
-  // Map must be initialised after the container is visible
   setTimeout(() => {
     initMap();
     if (map) map.invalidateSize();
@@ -250,24 +229,210 @@ function enterFleet() {
   }, 80);
 }
 
-function enterEarnings() {
-  if (dashboardData) {
-    const d = dashboardData;
-    el('earnToday').textContent  = 'R' + d.earnings.today.toFixed(0);
-    el('earnWeek').textContent   = 'R' + d.earnings.week.toFixed(0);
-    el('earnMonth').textContent  = 'R' + d.earnings.month.toFixed(0);
-    el('statOnline').textContent = d.taxisOnline;
-    el('statOffline').textContent = d.taxisOffline;
-    el('statRating').textContent  = d.avgRating ? d.avgRating.toFixed(1) + '★' : '–';
-    el('statComplaints').textContent = d.complaints ? d.complaints.length : 0;
+// ── EARNINGS SECTION ─────────────────────────────────────────────────────────
+
+async function enterEarnings() {
+  // Populate filter dropdowns from cached data
+  if (!driversData) await loadDrivers();
+  if (!(window.__taxis || []).length) await loadTaxis();
+
+  const drvSel  = el('earnFilterDriver');
+  const taxiSel = el('earnFilterTaxi');
+
+  drvSel.innerHTML = '<option value="">All drivers</option>' +
+    (driversData || []).map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+
+  taxiSel.innerHTML = '<option value="">All taxis</option>' +
+    (window.__taxis || []).map((t) => `<option value="${t.id}">${escapeHtml(t.plate)}</option>`).join('');
+
+  await loadEarnings();
+}
+
+function setEarnTab(tab) {
+  earnTab = tab;
+  ['Today','Week','Month','Custom'].forEach((t) => {
+    const btn = el(`et${t}`);
+    if (btn) btn.classList.toggle('active', tab === t.toLowerCase());
+  });
+  el('earnCustomPanel').classList.toggle('hidden', tab !== 'custom');
+  if (tab !== 'custom') loadEarnings();
+}
+
+function applyEarnFilters() { loadEarnings(); }
+
+function applyEarnCustom() {
+  earnCustomStart = el('earnFromDate').value;
+  earnCustomEnd   = el('earnToDate').value;
+  if (!earnCustomStart || !earnCustomEnd) return;
+  if (earnCustomStart > earnCustomEnd) { alert('Start date must be on or before end date.'); return; }
+  loadEarnings();
+}
+
+async function loadEarnings() {
+  const drvFilter  = el('earnFilterDriver')?.value || '';
+  const taxiFilter = el('earnFilterTaxi')?.value   || '';
+
+  const params = new URLSearchParams();
+  if (drvFilter)  params.set('driver_id', drvFilter);
+  if (taxiFilter) params.set('taxi_id',   taxiFilter);
+
+  // For custom range, send the dates so the API computes breakdowns for that range
+  if (earnTab === 'custom' && earnCustomStart && earnCustomEnd) {
+    params.set('start_date', earnCustomStart);
+    params.set('end_date',   earnCustomEnd);
+  }
+  // For today/week/month the API always returns those; breakdowns default to current month
+  // which is fine — we show the correct summary from the returned period data.
+
+  try {
+    const res = await fetch(`/api/owner/${owner.id}/earnings?${params}`, { credentials: 'include' });
+    if (!res.ok) return;
+    earnData = await res.json();
+    renderEarningsData();
+    await loadEarnTrips();
+  } catch (_) { /* silent — network error */ }
+}
+
+function renderEarningsData() {
+  if (!earnData) return;
+
+  // Determine which period to show in the summary card
+  let period, label;
+  if (earnTab === 'today') {
+    period = earnData.today;
+    label  = formatSADate(period.date).long;
+  } else if (earnTab === 'week') {
+    period = earnData.week;
+    label  = `${formatSADate(period.start).short} – ${formatSADate(period.end).short}`;
+  } else if (earnTab === 'month') {
+    period = earnData.month;
+    label  = `${period.name} · ${formatSADate(period.start).short} – ${formatSADate(period.end).short}`;
   } else {
-    loadDashboard().then(() => enterEarnings());
+    // custom — use period (which has the custom range if sent, else current month)
+    period = earnData.period;
+    label  = `${formatSADate(period.start).short} – ${formatSADate(period.end).short}`;
+  }
+
+  el('earnPeriodLbl').textContent = label;
+  el('earnBigTotal').textContent  = 'R' + Number(period?.total || 0).toFixed(0);
+  el('earnTripCount').textContent = period?.trips || 0;
+  el('earnAvgFare').textContent   = 'R' + Number(period?.avg_fare || 0).toFixed(2);
+
+  // Per-driver breakdown
+  const bdEl = el('earnByDriver');
+  if (earnData.byDriver?.length) {
+    bdEl.innerHTML = `<table class="earn-table">
+      <thead><tr><th>Driver</th><th>Trips</th><th>Total</th><th>Avg</th></tr></thead>
+      <tbody>${earnData.byDriver.map((d) => `
+        <tr>
+          <td title="${escapeHtml(d.driver_name)}">${escapeHtml(d.driver_name)}</td>
+          <td>${d.trips}</td>
+          <td>R${Number(d.total).toFixed(0)}</td>
+          <td>R${Number(d.avg_fare).toFixed(2)}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } else {
+    bdEl.innerHTML = '<p class="muted">No trips recorded for this period.</p>';
+  }
+
+  // Per-taxi breakdown
+  const btEl = el('earnByTaxi');
+  if (earnData.byTaxi?.length) {
+    btEl.innerHTML = `<table class="earn-table">
+      <thead><tr><th>Taxi</th><th>Trips</th><th>Total</th><th>Avg</th></tr></thead>
+      <tbody>${earnData.byTaxi.map((t) => `
+        <tr>
+          <td title="${escapeHtml(t.taxi_plate)}">${escapeHtml(t.taxi_plate)}</td>
+          <td>${t.trips}</td>
+          <td>R${Number(t.total).toFixed(0)}</td>
+          <td>R${Number(t.avg_fare).toFixed(2)}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } else {
+    btEl.innerHTML = '<p class="muted">No trips recorded for this period.</p>';
+  }
+
+  // Daily totals
+  const dtEl = el('earnDailyTotals');
+  if (earnData.dailyTotals?.length) {
+    dtEl.innerHTML = `<table class="earn-table">
+      <thead><tr><th>Date</th><th>Trips</th><th>Total</th></tr></thead>
+      <tbody>${earnData.dailyTotals.map((d) => `
+        <tr>
+          <td>${formatSADate(d.sa_date).long}</td>
+          <td>${d.trips}</td>
+          <td>R${Number(d.total).toFixed(0)}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } else {
+    dtEl.innerHTML = '<p class="muted">No daily data for this period.</p>';
   }
 }
 
-async function enterFeedback() {
-  await loadFeedback();
+async function loadEarnTrips() {
+  const drvFilter  = el('earnFilterDriver')?.value || '';
+  const taxiFilter = el('earnFilterTaxi')?.value   || '';
+
+  const params = new URLSearchParams({ limit: '100' });
+  if (drvFilter)  params.set('driver_id', drvFilter);
+  if (taxiFilter) params.set('taxi_id',   taxiFilter);
+
+  // Match trip list date range to active tab
+  if (earnData) {
+    if (earnTab === 'today') {
+      params.set('date', earnData.today.date);
+    } else if (earnTab === 'week') {
+      params.set('start_date', earnData.week.start);
+      params.set('end_date',   earnData.week.end);
+    } else if (earnTab === 'month') {
+      params.set('start_date', earnData.month.start);
+      params.set('end_date',   earnData.month.end);
+    } else if (earnTab === 'custom' && earnCustomStart && earnCustomEnd) {
+      params.set('start_date', earnCustomStart);
+      params.set('end_date',   earnCustomEnd);
+    }
+  }
+
+  try {
+    const res   = await fetch(`/api/owner/${owner.id}/trips?${params}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const trips = await res.json();
+    renderEarnTripList(trips);
+  } catch (_) { /* silent */ }
 }
+
+function renderEarnTripList(trips) {
+  const container = el('earnTripList');
+  if (!trips?.length) {
+    container.innerHTML = '<p class="muted">No trips recorded for this period.</p>';
+    return;
+  }
+  container.innerHTML = trips.map((t) => {
+    const { dateShort, time } = formatSADateTime(t.created_at);
+    const pm = (t.payment_method || 'CASH').toLowerCase();
+    return `
+      <div class="trip-card">
+        <div class="trip-card-hdr">
+          <span class="trip-card-dt">${escapeHtml(dateShort)} · ${escapeHtml(time)}</span>
+          <span class="trip-card-fare">R${Number(t.fare).toFixed(0)}</span>
+        </div>
+        <div class="trip-card-meta">
+          <span>👤 ${escapeHtml(t.driver_name || '—')}</span>
+          <span>🚐 ${escapeHtml(t.taxi_plate  || '—')}</span>
+          <span class="badge-pay badge-pay-${pm}">${escapeHtml(t.payment_method || 'CASH')}</span>
+        </div>
+        <div class="trip-card-route">
+          📍 <strong>${escapeHtml(t.from_location || '—')}</strong>
+          <span style="color:var(--muted);margin:0 4px;">→</span>
+          <strong>${escapeHtml(t.to_location || '—')}</strong>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Other sections ────────────────────────────────────────────────────────────
+
+async function enterFeedback() { await loadFeedback(); }
 
 async function enterReports() {
   if (!dashboardData) await loadDashboard();
@@ -278,7 +443,6 @@ async function enterReports() {
   if (driversData) {
     el('repApproved').textContent = driversData.filter((x) => x.verification_status === 'approved').length;
   }
-  // Expiring docs
   if (d.expiringDocs && d.expiringDocs.length > 0) {
     el('repExpiringWrap').classList.remove('hidden');
     el('repExpiringList').innerHTML = d.expiringDocs.map((x) =>
@@ -296,7 +460,6 @@ async function enterNotifications() {
   if (!dashboardData) await loadDashboard();
   renderNotifSos();
   if (!driversData) await loadDrivers();
-  // Messaging drivers dropdown is populated by loadDrivers()
 }
 
 function renderNotifSos() {
@@ -309,7 +472,7 @@ function renderNotifSos() {
   list.innerHTML = dashboardData.activeSos.map((a) =>
     `<div class="alert">🚨 <strong>${escapeHtml(a.driver_name)}</strong>
      ${a.lat ? ` — GPS: ${Number(a.lat).toFixed(4)}, ${Number(a.lng).toFixed(4)}` : ''}
-     <div class="muted" style="font-size:12px;margin-top:4px;">${new Date(a.created_at).toLocaleString()}</div>
+     <div class="muted" style="font-size:12px;margin-top:4px;">${formatSADateTime(a.created_at).dateShort + ' · ' + formatSADateTime(a.created_at).time}</div>
      <button style="width:auto;margin-top:6px;padding:4px 10px;" onclick="resolveSos(${a.id})">Mark resolved</button>
     </div>`
   ).join('');
@@ -334,19 +497,16 @@ function refreshCCStats() {
   } else {
     el('ccPending').textContent = '–';
   }
-  // SOS badge
   const sosCount = (d.activeSos || []).length;
   setBadge('notifications', sosCount);
 }
 
 function setBadge(sectionId, count) {
-  // Card badge
   const ccBadge = document.getElementById(`cc-badge-${sectionId}`);
   if (ccBadge) {
     ccBadge.textContent = count;
     ccBadge.classList.toggle('hidden', count <= 0);
   }
-  // Sidebar badge
   const snavBadge = document.getElementById(`snav-badge-${sectionId}`);
   if (snavBadge) {
     snavBadge.textContent = count;
@@ -397,7 +557,8 @@ function updateMapMarker(row) {
 }
 
 function popupContent(row) {
-  const upd = row.location_updated_at ? new Date(row.location_updated_at).toLocaleTimeString() : '—';
+  const { dateShort, time } = formatSADateTime(row.location_updated_at);
+  const upd = row.location_updated_at ? `${dateShort} ${time}` : '—';
   return `<strong>${escapeHtml(row.driver_name)}</strong><br>Plate: ${escapeHtml(row.taxi_plate || '—')}<br>${row.lat ? `${parseFloat(row.lat).toFixed(5)}, ${parseFloat(row.lng).toFixed(5)}<br>` : ''}Last update: ${upd}`;
 }
 
@@ -444,8 +605,10 @@ function renderFleetRow(row) {
   const badge  = online ? '<span class="badge online">🟢 ONLINE</span>' : '<span class="badge offline">🔴 OFFLINE</span>';
   const lat    = row.lat  != null ? Number(row.lat).toFixed(5)  : '—';
   const lng    = row.lng  != null ? Number(row.lng).toFixed(5)  : '—';
-  const upd    = row.location_updated_at ? new Date(row.location_updated_at).toLocaleTimeString() : '—';
-  const shift  = row.shift_start ? new Date(row.shift_start).toLocaleTimeString() : '—';
+  const { time: updTime } = formatSADateTime(row.location_updated_at);
+  const { time: shiftTime } = formatSADateTime(row.shift_start);
+  const upd   = row.location_updated_at ? updTime  : '—';
+  const shift = row.shift_start         ? shiftTime : '—';
   return `<tr id="fleet-row-${row.driver_id}" class="${online ? 'fleet-row-online' : ''}">
     <td>${badge}</td><td>${escapeHtml(row.driver_name)}</td><td>${escapeHtml(row.taxi_plate || '—')}</td>
     <td class="fleet-coord">${lat}</td><td class="fleet-coord">${lng}</td>
@@ -465,7 +628,7 @@ function updateFleetRow(data) {
     const cells = row.querySelectorAll('td');
     if (cells[3]) cells[3].textContent = Number(data.lat).toFixed(5);
     if (cells[4]) cells[4].textContent = Number(data.lng).toFixed(5);
-    if (cells[5]) cells[5].textContent = new Date(data.updated_at || Date.now()).toLocaleTimeString();
+    if (cells[5]) cells[5].textContent = formatSADateTime(data.updated_at || new Date().toISOString()).time;
     row.classList.add('fleet-row-flash');
     setTimeout(() => row.classList.remove('fleet-row-flash'), 1200);
   }
@@ -611,18 +774,16 @@ async function addDriver() {
   const data = await res.json();
   if (!res.ok) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
 
-  // Clear form
   ['drvName','drvPhone','drvIdNumber','drvLicense','drvPdp'].forEach((id) => el(id).value = '');
   ['drvPassword','drvLicenseExpiry','drvPdpExpiry'].forEach((id) => el(id).value = '');
   ['drvLicenseDoc','drvPdpDoc','drvSelfie'].forEach((id) => el(id).value = '');
   el('drvTaxiAssign').value = '';
 
-  // Collapse the form
   el('drvFormBody').classList.add('hidden');
   el('drvFormToggle').textContent = '＋ Register a new driver';
 
   alert(`✅ Driver "${data.name}" registered. Status: PENDING — approve them from the list above.`);
-  driversData = null; // invalidate cache
+  driversData = null;
   await loadDrivers();
   loadFleet();
   refreshCCStats();
@@ -637,7 +798,6 @@ async function loadDrivers() {
   list.innerHTML = driversData.map(renderDriverCard).join('') ||
     '<p class="muted">No drivers registered yet.</p>';
 
-  // Set assign dropdown values
   driversData.forEach((d) => {
     const sel = document.querySelector(`.assign-select[data-driver-id="${d.id}"]`);
     if (sel) sel.value = d.current_taxi_id || '';
@@ -648,7 +808,6 @@ async function loadDrivers() {
     if (sel) sel.value = d.current_taxi_id || '';
   });
 
-  // Messaging dropdown (approved only)
   const msgSel   = el('msgDriver');
   const approved = driversData.filter((d) => d.verification_status === 'approved');
   msgSel.innerHTML = approved.length
@@ -740,7 +899,7 @@ async function toggleDriverDetail(driverId) {
       <p><strong>Licence:</strong> ${d.license_no || '—'} · Exp: ${d.license_expiry || '—'}</p>
       <p><strong>PDP:</strong> ${d.pdp_no || '—'} · Exp: ${d.pdp_expiry || '—'}</p>
       <p><strong>Taxi:</strong> ${d.taxi_plate || 'Unassigned'}</p>
-      <p><strong>Registered:</strong> ${new Date(d.created_at).toLocaleDateString()}</p>
+      <p><strong>Registered:</strong> ${formatSADate(d.created_at?.slice(0,10))?.long || d.created_at}</p>
       <div style="margin-top:10px;">${selfieHtml}</div>
       ${docLinks ? `<div class="doc-links">${docLinks}</div>` : '<p class="muted" style="margin-top:8px;">No documents uploaded.</p>'}
     </div>`;
@@ -771,13 +930,14 @@ async function loadFeedback() {
 function renderFeedbackItem(fb) {
   const stars   = fb.rating ? '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating) : '';
   const reports = (fb.report_types || []).map((r) => `<span class="badge rejected">${escapeHtml(r)}</span>`).join(' ');
+  const { dateShort, time } = formatSADateTime(fb.created_at);
   return `
     <div class="list-item">
       <strong>${escapeHtml(fb.plate)}</strong>${fb.driver_name ? ' · ' + escapeHtml(fb.driver_name) : ''}
       ${stars ? `<div style="color:#e2a400;">${stars}</div>` : ''}
       ${fb.comment ? `<div class="feedback-comment">"${escapeHtml(fb.comment)}"</div>` : ''}
       ${reports ? `<div style="margin-top:4px;">${reports}</div>` : ''}
-      <div class="muted">${new Date(fb.created_at).toLocaleString()}</div>
+      <div class="muted">${dateShort} · ${time}</div>
     </div>`;
 }
 
@@ -826,6 +986,40 @@ function toggleCollapsible(bodyId) {
   const toggle = el('drvFormToggle');
   const open   = body.classList.toggle('hidden');
   toggle.textContent = open ? '＋ Register a new driver' : '－ Close registration form';
+}
+
+// ─── SAST date/time helpers ────────────────────────────────────────────────────
+
+const MONTHS_LONG  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SA_OFFSET_MS = 2 * 60 * 60 * 1000; // UTC+2
+
+/**
+ * Format a YYYY-MM-DD SAST date string (as returned by the earnings API).
+ * Returns { long: '11 August 2026', short: '11 Aug 2026' }
+ */
+function formatSADate(ymd) {
+  if (!ymd) return { long: '—', short: '—' };
+  const [y, m, d] = ymd.split('-').map(Number);
+  return {
+    long:  `${d} ${MONTHS_LONG[m - 1]} ${y}`,
+    short: `${d} ${MONTHS_SHORT[m - 1]} ${y}`,
+  };
+}
+
+/**
+ * Convert a UTC ISO string (as stored in the DB) to SAST display strings.
+ * Returns { date: '11 August 2026', dateShort: '11 Aug 2026', time: '07:35' }
+ */
+function formatSADateTime(utcStr) {
+  if (!utcStr) return { date: '—', dateShort: '—', time: '—' };
+  const ms = new Date(utcStr).getTime() + SA_OFFSET_MS;
+  const sa = new Date(ms);
+  return {
+    date:      `${sa.getUTCDate()} ${MONTHS_LONG[sa.getUTCMonth()]} ${sa.getUTCFullYear()}`,
+    dateShort: `${sa.getUTCDate()} ${MONTHS_SHORT[sa.getUTCMonth()]} ${sa.getUTCFullYear()}`,
+    time:      `${String(sa.getUTCHours()).padStart(2, '0')}:${String(sa.getUTCMinutes()).padStart(2, '0')}`,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════ INIT ══

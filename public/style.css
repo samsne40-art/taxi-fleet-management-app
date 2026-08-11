@@ -414,3 +414,172 @@ header.app-bar {
 }
 header.app-bar small { font-weight: 400; opacity: .85; font-size: 12px; }
 main { max-width: 760px; margin: 0 auto; padding: 16px; }
+
+/* ══════════════════════════════════════════════════ TRIP MODAL ══ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end; /* bottom sheet on mobile */
+}
+.modal-sheet {
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-height: 92dvh;
+  overflow-y: auto;
+}
+@media (min-width: 560px) {
+  .modal-overlay { align-items: center; justify-content: center; }
+  .modal-sheet { border-radius: 16px; width: 480px; max-height: 82dvh; }
+}
+.modal-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+.modal-hdr h3 { margin: 0; font-size: 18px; font-weight: 700; }
+.modal-close-btn {
+  width: 32px; height: 32px; min-width: 32px; margin: 0;
+  border-radius: 50%; background: var(--bg); color: var(--text);
+  border: none; font-size: 16px; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-body { padding: 16px 16px 32px; }
+
+/* Big RECORD TRIP button (driver app) */
+.record-trip-fab {
+  width: 100%;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 18px;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  margin: 0 0 14px;
+  letter-spacing: .5px;
+  box-shadow: 0 4px 20px rgba(10,125,60,.28);
+  transition: opacity .15s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.record-trip-fab:active { transform: scale(.98); opacity: .9; }
+.record-trip-fab:disabled { opacity: .35; box-shadow: none; cursor: not-allowed; }
+
+/* Payment method toggle buttons */
+.payment-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+.pm-btn {
+  flex: 1; margin: 0; padding: 10px 4px;
+  background: var(--bg); color: var(--text);
+  border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+}
+.pm-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+
+/* Trip success flash (inside modal) */
+.trip-success {
+  background: #e4f6ea; color: var(--green);
+  border: 1px solid #a8d8b3;
+  border-radius: 8px; padding: 12px 14px;
+  font-weight: 600; font-size: 14px;
+  margin-bottom: 8px;
+}
+
+/* ════════════════════════════════════ DRIVER EARNINGS SECTION ══ */
+.earn-period-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.earn-period-row:last-child { border-bottom: none; }
+.earn-period-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.earn-period-date { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.earn-period-amount { font-size: 28px; font-weight: 800; color: var(--green); margin-top: 2px; }
+.earn-period-trips  { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+/* ════════════════════════════════════ TRIP HISTORY ITEMS (DRIVER) ══ */
+.trip-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.trip-item:last-child { border-bottom: none; }
+.trip-item-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.trip-datetime { font-size: 12px; color: var(--muted); font-weight: 600; }
+.trip-fare     { font-size: 16px; font-weight: 800; color: var(--green); flex-shrink: 0; }
+.trip-route    { font-size: 13px; line-height: 1.4; }
+.trip-arrow    { color: var(--muted); margin: 0 4px; }
+.trip-meta     { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ════════════════════════════════════ OWNER EARNINGS SECTION ══ */
+.earn-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+.earn-tab {
+  flex: 1; padding: 9px 4px; margin: 0;
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all .15s;
+}
+.earn-tab.active { background: var(--green); color: #fff; border-color: var(--green); }
+
+/* Summary card */
+.earn-summary-card { text-align: center; padding: 22px 16px; }
+.earn-period-lbl  { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; letter-spacing: .2px; }
+.earn-big-total   { font-size: 44px; font-weight: 800; color: var(--green); line-height: 1; }
+.earn-meta-row    { display: flex; justify-content: center; gap: 24px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.earn-meta-row strong { color: var(--text); }
+
+/* Earnings breakdown table */
+.earn-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.earn-table th {
+  text-align: left; color: var(--muted); font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .3px; padding: 6px 8px;
+  border-bottom: 2px solid var(--border); white-space: nowrap;
+}
+.earn-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.earn-table tr:last-child td { border-bottom: none; }
+.earn-table td:not(:first-child) { text-align: right; font-weight: 600; }
+.earn-table td:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Trip cards (owner earnings list) */
+.trip-card {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.trip-card:last-child { border-bottom: none; }
+.trip-card-hdr {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+}
+.trip-card-dt   { font-size: 12px; color: var(--muted); font-weight: 600; }
+.trip-card-fare { font-size: 15px; font-weight: 800; color: var(--green); flex-shrink: 0; }
+.trip-card-meta { font-size: 12px; color: var(--muted); margin: 4px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.trip-card-route { font-size: 13px; line-height: 1.4; }
+
+/* Payment method badges */
+.badge-pay { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: .3px; }
+.badge-pay-cash  { background: #e4f6ea; color: var(--green); }
+.badge-pay-eft   { background: #e8f0fe; color: #1a73e8; }
+.badge-pay-other { background: #fff8e6; color: #b07d00; }
