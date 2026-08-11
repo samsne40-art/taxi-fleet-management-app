@@ -4,7 +4,7 @@ const db = require('../db');
 
 function taxiWithDriver(taxi) {
   if (!taxi) return null;
-  const driver = db.prepare('SELECT id, name, phone FROM drivers WHERE current_taxi_id = ?').get(taxi.id);
+  const driver = db.prepare('SELECT id, name FROM drivers WHERE current_taxi_id = ? AND verification_status = ?').get(taxi.id, 'approved');
   const ratingRow = db.prepare('SELECT AVG(rating) as avg, COUNT(*) as count FROM feedback WHERE taxi_id = ? AND rating IS NOT NULL').get(taxi.id);
   return {
     id: taxi.id,
@@ -16,15 +16,10 @@ function taxiWithDriver(taxi) {
   };
 }
 
+// Lookup by number plate only (QR code removed)
 router.get('/taxi/plate/:plate', (req, res) => {
   const taxi = db.prepare('SELECT * FROM taxis WHERE plate = ?').get(req.params.plate.toUpperCase().trim());
   if (!taxi) return res.status(404).json({ error: 'no taxi found with that plate' });
-  res.json(taxiWithDriver(taxi));
-});
-
-router.get('/taxi/token/:token', (req, res) => {
-  const taxi = db.prepare('SELECT * FROM taxis WHERE qr_token = ?').get(req.params.token);
-  if (!taxi) return res.status(404).json({ error: 'invalid QR code' });
   res.json(taxiWithDriver(taxi));
 });
 
@@ -33,7 +28,7 @@ router.post('/feedback', (req, res) => {
   if (!taxi_id) return res.status(400).json({ error: 'taxi_id required' });
   const taxi = db.prepare('SELECT * FROM taxis WHERE id = ?').get(taxi_id);
   if (!taxi) return res.status(404).json({ error: 'taxi not found' });
-  const driver = db.prepare('SELECT * FROM drivers WHERE current_taxi_id = ?').get(taxi_id);
+  const driver = db.prepare('SELECT * FROM drivers WHERE current_taxi_id = ? AND verification_status = ?').get(taxi_id, 'approved');
 
   const types = Array.isArray(report_types) ? report_types : [];
   const info = db.prepare(

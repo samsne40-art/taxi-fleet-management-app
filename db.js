@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS taxis (
   owner_id INTEGER NOT NULL REFERENCES owners(id),
   plate TEXT UNIQUE NOT NULL,
   qr_token TEXT UNIQUE NOT NULL,
-  status TEXT DEFAULT 'offline',       -- offline | online
+  status TEXT DEFAULT 'offline',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   password TEXT,
   license_no TEXT,
   pdp_no TEXT,
-  status TEXT DEFAULT 'active',        -- active | suspended
+  status TEXT DEFAULT 'active',
   current_taxi_id INTEGER REFERENCES taxis(id),
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -64,9 +64,9 @@ CREATE TABLE IF NOT EXISTS feedback (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   taxi_id INTEGER NOT NULL REFERENCES taxis(id),
   driver_id INTEGER,
-  rating INTEGER,                      -- 1-5, nullable for pure reports
+  rating INTEGER,
   comment TEXT,
-  report_types TEXT,                   -- JSON array string
+  report_types TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_id INTEGER NOT NULL,
   driver_id INTEGER NOT NULL,
-  sender TEXT NOT NULL,                -- owner | driver
+  sender TEXT NOT NULL,
   text TEXT NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -90,12 +90,29 @@ CREATE TABLE IF NOT EXISTS sos_alerts (
 );
 `);
 
-// Migration: add password column to drivers if it doesn't exist yet
-// (safe to run every startup — ALTER TABLE fails silently if column exists)
-try {
-  db.exec(`ALTER TABLE drivers ADD COLUMN password TEXT`);
-} catch (_) {
-  // column already exists — nothing to do
+// ── Migrations (safe to run every startup) ───────────────────────────────────
+
+const migrations = [
+  `ALTER TABLE drivers ADD COLUMN password TEXT`,
+  `ALTER TABLE drivers ADD COLUMN id_number TEXT`,
+  `ALTER TABLE drivers ADD COLUMN license_expiry TEXT`,
+  `ALTER TABLE drivers ADD COLUMN pdp_expiry TEXT`,
+  `ALTER TABLE drivers ADD COLUMN selfie_path TEXT`,
+  `ALTER TABLE drivers ADD COLUMN license_doc_path TEXT`,
+  `ALTER TABLE drivers ADD COLUMN pdp_doc_path TEXT`,
+  `ALTER TABLE drivers ADD COLUMN verification_status TEXT`,
+];
+for (const sql of migrations) {
+  try { db.exec(sql); } catch (_) { /* column already exists */ }
 }
+
+// Set verification_status for drivers created before this column existed.
+// Active → approved so existing working accounts keep working.
+db.prepare(`UPDATE drivers SET verification_status = 'approved'
+            WHERE verification_status IS NULL AND (status = 'active' OR status IS NULL)`).run();
+db.prepare(`UPDATE drivers SET verification_status = 'suspended'
+            WHERE verification_status IS NULL AND status = 'suspended'`).run();
+db.prepare(`UPDATE drivers SET verification_status = 'pending'
+            WHERE verification_status IS NULL`).run();
 
 module.exports = db;

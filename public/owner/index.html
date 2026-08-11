@@ -38,6 +38,7 @@
 
     <div id="sosBanner"></div>
 
+    <!-- Fleet Overview -->
     <section class="card">
       <h2>Fleet overview</h2>
       <div class="row">
@@ -53,39 +54,74 @@
       </div>
     </section>
 
+    <!-- Register Taxi -->
     <section class="card">
       <h2>Register a taxi</h2>
       <input id="newPlate" placeholder="Number plate e.g. ND 456-123">
-      <button onclick="addTaxi()">Add taxi + generate QR code</button>
-      <div id="newTaxiQr"></div>
+      <button onclick="addTaxi()">Add taxi</button>
+      <div id="addTaxiMsg" class="hidden" style="color:var(--green);font-weight:600;margin-top:4px;"></div>
     </section>
 
+    <!-- Taxi List -->
     <section class="card">
       <h2>Taxis (<span id="taxiCount">0</span>)</h2>
       <div id="taxiList"></div>
     </section>
 
+    <!-- Register Driver -->
     <section class="card">
       <h2>Register a driver</h2>
-      <input id="drvName" placeholder="Driver name">
-      <input id="drvPhone" placeholder="Phone number (used to log in)">
-      <input id="drvPassword" type="password" placeholder="Set driver's login password (min 6 characters)">
-      <input id="drvLicense" placeholder="Driver's licence number">
+      <p class="muted" style="margin-top:0;">New drivers start as <strong>Pending</strong> and must be approved before they can operate.</p>
+
+      <p class="form-section">Personal information</p>
+      <input id="drvName" placeholder="Full name *">
+      <input id="drvPhone" placeholder="Phone number * (used to log in)">
+      <input id="drvIdNumber" placeholder="ID number">
+
+      <p class="form-section">Login password</p>
+      <input id="drvPassword" type="password" placeholder="Set driver login password * (min 6 characters)" autocomplete="new-password">
+
+      <p class="form-section">Driver's licence</p>
+      <input id="drvLicense" placeholder="Licence number">
+      <label class="field-label">Licence expiry date</label>
+      <input id="drvLicenseExpiry" type="date">
+      <label class="field-label">Licence document / photo (jpg, png, pdf — max 5 MB)</label>
+      <input id="drvLicenseDoc" type="file" accept="image/*,.pdf">
+
+      <p class="form-section">PDP (Professional Driving Permit)</p>
       <input id="drvPdp" placeholder="PDP number">
-      <div class="muted" style="margin-bottom:10px;">The driver will use their phone number and this password to log in to the Driver app.</div>
-      <button onclick="addDriver()">Add driver</button>
+      <label class="field-label">PDP expiry date</label>
+      <input id="drvPdpExpiry" type="date">
+      <label class="field-label">PDP document / photo (jpg, png, pdf — max 5 MB)</label>
+      <input id="drvPdpDoc" type="file" accept="image/*,.pdf">
+
+      <p class="form-section">Identity</p>
+      <label class="field-label">Driver selfie / photo (jpg, png — max 5 MB)</label>
+      <input id="drvSelfie" type="file" accept="image/*">
+
+      <p class="form-section">Taxi assignment</p>
+      <label class="field-label">Assign to taxi (optional — can be set later)</label>
+      <select id="drvTaxiAssign">
+        <option value="">— Unassigned —</option>
+      </select>
+
+      <div id="drvError" class="alert hidden"></div>
+      <button onclick="addDriver()">Register driver</button>
     </section>
 
+    <!-- Driver Management -->
     <section class="card">
-      <h2>Drivers (<span id="driverCount">0</span>)</h2>
+      <h2>Driver management (<span id="driverCount">0</span>)</h2>
       <div id="driverList"></div>
     </section>
 
+    <!-- Feedback -->
     <section class="card">
       <h2>Live feedback &amp; complaints</h2>
       <div id="feedbackList"></div>
     </section>
 
+    <!-- Messaging -->
     <section class="card">
       <h2>Message a driver</h2>
       <select id="msgDriver"></select>

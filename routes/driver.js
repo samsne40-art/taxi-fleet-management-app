@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireDriver } = require('../middleware/auth');
 
-// ─── Auth (public) ────────────────────────────────────────────────────────────
+// ── Auth (public) ────────────────────────────────────────────────────────────
 
 router.post('/login', async (req, res) => {
   const { phone, password } = req.body;
@@ -14,36 +14,45 @@ router.post('/login', async (req, res) => {
   const driver = db.prepare('SELECT * FROM drivers WHERE phone = ?').get(phone);
   if (!driver)
     return res.status(401).json({ error: 'no driver registered with that number — ask your owner to add you' });
-  if (driver.status === 'suspended')
-    return res.status(403).json({ error: 'your account has been suspended by the owner' });
   if (!driver.password)
-    return res.status(401).json({ error: 'no password set for this account — ask your owner to re-add you with a password' });
+    return res.status(401).json({ error: 'no password set — ask your owner to re-register your account' });
 
   const match = await bcrypt.compare(password, driver.password);
   if (!match)
     return res.status(401).json({ error: 'incorrect phone number or password' });
 
+  // Block login for non-approved drivers with a clear, status-specific message
+  if (driver.verification_status !== 'approved') {
+    const msgs = {
+      pending:   'Your account is pending verification. The owner has not yet approved your account. Please check back later.',
+      rejected:  'Your account registration has been rejected by the owner. Please contact your owner for assistance.',
+      suspended: 'Your account has been suspended by the owner. Please contact your owner for assistance.',
+    };
+    return res.status(403).json({
+      error: msgs[driver.verification_status] || 'Your account is not currently approved.',
+      verification_status: driver.verification_status,
+    });
+  }
+
   req.session.userId = driver.id;
   req.session.role = 'driver';
   req.session.name = driver.name;
 
-  // Return driver info without the password hash
-  const { password: _pw, ...safeDriver } = driver;
+  // Strip the password hash and document paths from the response
+  const { password: _pw, selfie_path: _s, license_doc_path: _l, pdp_doc_path: _p, id_number: _i, ...safeDriver } = driver;
   res.json(safeDriver);
 });
 
-// ─── All routes below require an authenticated driver session ─────────────────
+// ── Protected routes (approved drivers only — enforced by requireDriver) ─────
 
 router.post('/:driverId/shift/start', requireDriver, (req, res) => {
   const { driverId } = req.params;
   const driver = db.prepare('SELECT * FROM drivers WHERE id = ?').get(driverId);
   if (!driver) return res.status(404).json({ error: 'driver not found' });
   if (!driver.current_taxi_id) return res.status(400).json({ error: 'no taxi assigned — ask your owner to assign one' });
-  if (driver.status === 'suspended') return res.status(403).json({ error: 'account suspended' });
 
   db.prepare('INSERT INTO shifts (driver_id, taxi_id) VALUES (?, ?)').run(driverId, driver.current_taxi_id);
   db.prepare("UPDATE taxis SET status = 'online' WHERE id = ?").run(driver.current_taxi_id);
-
   req.app.locals.io.to(`owner_${driver.owner_id}`).emit('taxi_status', { taxi_id: driver.current_taxi_id, status: 'online' });
   res.json({ ok: true, taxi_id: driver.current_taxi_id });
 });
@@ -95,7 +104,7 @@ router.get('/:driverId/earnings', requireDriver, (req, res) => {
   const earn = (clause) => db.prepare(`SELECT COALESCE(SUM(fare),0) as total, COUNT(*) as trips FROM trips WHERE driver_id = ? AND ${clause}`).get(driverId);
   res.json({
     today: earn("date(created_at) = date('now')"),
-    week: earn("created_at >= date('now','-7 days')"),
+    week:  earn("created_at >= date('now','-7 days')"),
     month: earn("created_at >= date('now','-30 days')"),
   });
 });
@@ -115,7 +124,8 @@ router.post('/:driverId/sos', requireDriver, (req, res) => {
     .run(driverId, driver.current_taxi_id, lat || null, lng || null);
 
   req.app.locals.io.to(`owner_${driver.owner_id}`).emit('sos_alert', {
-    id: info.lastInsertRowid, driver_id: Number(driverId), driver_name: driver.name, taxi_id: driver.current_taxi_id, lat, lng,
+    id: info.lastInsertRowid, driver_id: Number(driverId),
+    driver_name: driver.name, taxi_id: driver.current_taxi_id, lat, lng,
   });
   res.json({ ok: true });
 });
