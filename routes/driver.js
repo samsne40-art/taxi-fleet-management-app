@@ -285,4 +285,37 @@ router.post('/:driverId/sos', requireDriver, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Passenger ratings for this driver ─────────────────────────────────────────
+
+router.get('/:driverId/ratings', requireDriver, (req, res) => {
+  const driverId = req.params.driverId;
+
+  // Drivers may only view their own ratings
+  if (String(req.session.userId) !== String(driverId)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const stats = db.prepare(`
+    SELECT
+      AVG(rating)   AS avg_rating,
+      COUNT(rating) AS total_ratings
+    FROM feedback
+    WHERE driver_id = ? AND rating IS NOT NULL
+  `).get(driverId);
+
+  const recent = db.prepare(`
+    SELECT rating, comment, created_at
+    FROM feedback
+    WHERE driver_id = ? AND rating IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 10
+  `).all(driverId);
+
+  res.json({
+    avg_rating:    stats.avg_rating,
+    total_ratings: stats.total_ratings || 0,
+    recent,
+  });
+});
+
 module.exports = router;

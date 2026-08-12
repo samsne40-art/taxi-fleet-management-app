@@ -928,16 +928,30 @@ async function loadFeedback() {
 }
 
 function renderFeedbackItem(fb) {
-  const stars   = fb.rating ? '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating) : '';
-  const reports = (fb.report_types || []).map((r) => `<span class="badge rejected">${escapeHtml(r)}</span>`).join(' ');
+  const n = parseInt(fb.rating, 10);
+  const hasRating = n >= 1 && n <= 5;
+  const starsHtml = hasRating
+    ? `<span class="fb-stars">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>` +
+      `<span class="fb-rating-num">${n}/5</span>`
+    : '<span class="muted" style="font-size:12px;">No rating</span>';
+
+  const reports = (fb.report_types || [])
+    .map((r) => `<span class="badge rejected">${escapeHtml(r)}</span>`)
+    .join(' ');
   const { dateShort, time } = formatSADateTime(fb.created_at);
+
   return `
     <div class="list-item">
-      <strong>${escapeHtml(fb.plate)}</strong>${fb.driver_name ? ' · ' + escapeHtml(fb.driver_name) : ''}
-      ${stars ? `<div style="color:#e2a400;">${stars}</div>` : ''}
+      <div class="fb-header">
+        <div class="fb-star-row">${starsHtml}</div>
+        <div class="fb-meta">
+          <span>🚐 <strong>${escapeHtml(fb.plate)}</strong></span>
+          ${fb.driver_name ? `<span>👤 ${escapeHtml(fb.driver_name)}</span>` : ''}
+          <span>🕐 ${escapeHtml(dateShort)} · ${escapeHtml(time)}</span>
+        </div>
+      </div>
       ${fb.comment ? `<div class="feedback-comment">"${escapeHtml(fb.comment)}"</div>` : ''}
-      ${reports ? `<div style="margin-top:4px;">${reports}</div>` : ''}
-      <div class="muted">${dateShort} · ${time}</div>
+      ${reports    ? `<div style="margin-top:6px;">${reports}</div>` : ''}
     </div>`;
 }
 

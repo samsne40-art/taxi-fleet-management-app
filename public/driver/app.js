@@ -160,6 +160,7 @@ function boot() {
 
   loadEarnings();
   loadTripHistory();
+  loadRatings();
   loadMessages();
 }
 
@@ -439,6 +440,52 @@ async function submitTrip() {
     btn.disabled    = false;
     btn.textContent = '✓ RECORD TRIP';
   }
+}
+
+// ─── Passenger Ratings ────────────────────────────────────────────────────────
+
+async function loadRatings() {
+  try {
+    const res = await fetch(`/api/driver/${driver.id}/ratings`, { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderRatings(data);
+  } catch (_) { /* silent — network error */ }
+}
+
+function renderRatings(data) {
+  const body = document.getElementById('ratingsBody');
+
+  if (!data || !data.total_ratings) {
+    body.innerHTML = '<p class="muted">No passenger ratings yet.</p>';
+    return;
+  }
+
+  const avg    = data.avg_rating;
+  const filled = Math.round(avg);
+  const stars  = '★'.repeat(filled) + '☆'.repeat(5 - filled);
+
+  const recentHtml = (data.recent || []).map((r) => {
+    const s = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+    const { dateShort } = formatSADateTime(r.created_at);
+    return `<div class="rating-item">
+      <span class="rating-stars">${s}</span>
+      ${r.comment ? `<span class="rating-comment">"${escapeHtml(r.comment)}"</span>` : ''}
+      <span class="rating-date muted">${escapeHtml(dateShort)}</span>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="rating-avg-row">
+      <div class="rating-avg-stars">${stars}</div>
+      <div class="rating-avg-num">${Number(avg).toFixed(1)}/5</div>
+      <div class="muted" style="font-size:12px;margin-top:4px;">
+        ${data.total_ratings} rating${data.total_ratings !== 1 ? 's' : ''}
+      </div>
+    </div>
+    ${data.recent && data.recent.length
+      ? `<h3 class="card-subh" style="margin:12px 0 8px;font-size:13px;">Recent feedback</h3>${recentHtml}`
+      : ''}`;
 }
 
 // ─── Earnings ─────────────────────────────────────────────────────────────────

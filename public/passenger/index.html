@@ -15,8 +15,8 @@
 
   <section id="lookupSection" class="card">
     <h2>Find your taxi</h2>
-    <input id="plateInput" placeholder="Enter number plate e.g. ND 456-123">
-    <button onclick="lookupByPlate()">Find taxi</button>
+    <input id="plateInput" placeholder="Enter number plate e.g. ND 456-123" autocomplete="off">
+    <button id="lookupBtn" onclick="lookupByPlate()">Find taxi</button>
     <div id="lookupError" class="alert hidden"></div>
   </section>
 
@@ -26,9 +26,17 @@
     <p class="muted" id="ratingSummary"></p>
 
     <h2>Rate this trip</h2>
-    <div class="stars" id="starPicker">
-      <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span><span class="star" data-v="3">★</span><span class="star" data-v="4">★</span><span class="star" data-v="5">★</span>
+
+    <!-- Star picker — five large tappable buttons -->
+    <div class="star-picker" id="starPicker" role="group" aria-label="Star rating, 1 to 5">
+      <button class="star-btn" data-v="1" type="button" aria-pressed="false" aria-label="1 star"   onclick="selectStar(1)">☆</button>
+      <button class="star-btn" data-v="2" type="button" aria-pressed="false" aria-label="2 stars"  onclick="selectStar(2)">☆</button>
+      <button class="star-btn" data-v="3" type="button" aria-pressed="false" aria-label="3 stars"  onclick="selectStar(3)">☆</button>
+      <button class="star-btn" data-v="4" type="button" aria-pressed="false" aria-label="4 stars"  onclick="selectStar(4)">☆</button>
+      <button class="star-btn" data-v="5" type="button" aria-pressed="false" aria-label="5 stars"  onclick="selectStar(5)">☆</button>
     </div>
+    <p class="rating-label">Your rating: <strong id="ratingValue">0</strong>/5</p>
+    <p id="ratingRequired" class="rating-required hidden">Please select a star rating before submitting.</p>
 
     <textarea id="comment" rows="3" placeholder="Leave a comment (optional)"></textarea>
 
@@ -40,9 +48,14 @@
       <div class="checkbox-row"><input type="checkbox" id="r5" value="compliment"><label for="r5">Compliment excellent service</label></div>
     </div>
 
-    <button onclick="submitFeedback()">Submit feedback</button>
+    <button id="submitBtn" onclick="submitFeedback()">Submit feedback</button>
+
     <div id="submitted" class="hidden">
-      <p>✅ Thanks — the owner has been notified.</p>
+      <div class="rating-confirm">
+        <p class="rating-confirm-msg">✅ Thank you! Your feedback has been submitted.</p>
+        <div id="confirmedRating" class="rating-confirm-stars"></div>
+        <p class="muted" style="margin-top:6px;font-size:13px;">The taxi owner has been notified.</p>
+      </div>
       <button class="secondary" onclick="resetForm()">Rate another taxi</button>
     </div>
   </section>

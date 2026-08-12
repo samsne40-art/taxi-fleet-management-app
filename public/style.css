@@ -415,6 +415,113 @@ header.app-bar {
 header.app-bar small { font-weight: 400; opacity: .85; font-size: 12px; }
 main { max-width: 760px; margin: 0 auto; padding: 16px; }
 
+/* ══════════════════════════════════════════════ PASSENGER STARS ══ */
+
+/* Container */
+.star-picker {
+  display: flex;
+  gap: 2px;
+  margin: 10px 0 6px;
+}
+
+/* Each star is a real button — large, touchable, no visual decoration */
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 44px;
+  line-height: 1;
+  cursor: pointer;
+  color: #d1d5db;          /* empty star — light grey */
+  padding: 6px 4px;
+  min-width: 52px;
+  min-height: 52px;
+  margin: 0;
+  border-radius: 6px;
+  transition: color .1s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation; /* prevent 300 ms tap delay on mobile */
+}
+.star-btn:hover  { color: #fbbf24; transform: scale(1.12); }
+.star-btn:active { transform: scale(.95); }
+.star-btn:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+  color: #fbbf24;
+}
+/* Filled (selected) state */
+.star-btn.filled { color: #f59e0b; }
+
+/* "Your rating: X/5" line */
+.rating-label {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 2px 0 10px;
+  font-weight: 600;
+}
+.rating-label strong { color: var(--text); }
+
+/* Validation hint */
+.rating-required {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+  margin: -6px 0 10px;
+}
+
+/* Shake animation when user tries to submit without selecting */
+@keyframes starShake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+.star-picker-shake { animation: starShake .4s ease; }
+
+/* Confirmation block shown after submit */
+.rating-confirm {
+  background: #e4f6ea;
+  border: 1px solid #a8d8b3;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+.rating-confirm-msg { font-weight: 700; font-size: 15px; margin: 0 0 8px; }
+.rating-confirm-stars {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+.confirm-stars   { font-size: 32px; color: #f59e0b; letter-spacing: 2px; line-height: 1; }
+.confirm-fraction { font-size: 20px; font-weight: 800; color: var(--green); }
+
+/* ═════════════════════════════════════════ OWNER FEEDBACK ITEMS ══ */
+
+.fb-header     { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.fb-star-row   { display: flex; align-items: baseline; gap: 8px; }
+.fb-stars      { font-size: 22px; color: #f59e0b; letter-spacing: 1px; line-height: 1; }
+.fb-rating-num { font-size: 14px; font-weight: 800; color: var(--text); }
+.fb-meta       { display: flex; gap: 12px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.fb-datetime   { font-size: 12px; margin-top: 6px; }
+
+/* ══════════════════════════════════════════ DRIVER RATINGS CARD ══ */
+
+.rating-avg-row   { text-align: center; padding: 8px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+.rating-avg-stars { font-size: 32px; color: #f59e0b; letter-spacing: 2px; line-height: 1; margin-bottom: 4px; }
+.rating-avg-num   { font-size: 22px; font-weight: 800; color: var(--text); }
+
+.rating-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.rating-item:last-child { border-bottom: none; }
+.rating-stars   { font-size: 18px; color: #f59e0b; letter-spacing: 1px; display: block; }
+.rating-comment { font-style: italic; font-size: 13px; color: var(--text); margin: 2px 0; display: block; }
+.rating-date    { font-size: 11px; display: block; margin-top: 2px; }
+
 /* ══════════════════════════════════════════════════ TRIP MODAL ══ */
 .modal-overlay {
   position: fixed;
