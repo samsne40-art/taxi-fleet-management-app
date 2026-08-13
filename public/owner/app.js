@@ -21,6 +21,7 @@ const SECTION_LOADERS = {
   taxis:         enterTaxis,
   drivers:       enterDrivers,
   fleet:         enterFleet,
+  activity:      enterActivity,
   earnings:      enterEarnings,
   feedback:      enterFeedback,
   reports:       enterReports,
@@ -428,6 +429,291 @@ function renderEarnTripList(trips) {
         </div>
       </div>`;
   }).join('');
+}
+
+// ══════════════════════════════════════════ ACTIVITY / TRIP HISTORY ══
+
+// State
+let actTab         = 'today';
+let actCustomStart = null;
+let actCustomEnd   = null;
+let actTripOffset  = 0;
+const ACT_PAGE     = 50;
+
+async function enterActivity() {
+  // Populate driver and taxi dropdowns from cached data
+  if (!driversData)             await loadDrivers();
+  if (!(window.__taxis || []).length) await loadTaxis();
+
+  const drvSel = el('actFilterDriver');
+  const txSel  = el('actFilterTaxi');
+
+  drvSel.innerHTML = '<option value="">All drivers</option>' +
+    (driversData || []).map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+
+  txSel.innerHTML = '<option value="">All taxis</option>' +
+    (window.__taxis || []).map((t) => `<option value="${t.id}">${escapeHtml(t.plate)}</option>`).join('');
+
+  reloadActivity();
+}
+
+function setActivityTab(tab) {
+  actTab = tab;
+  ['Today','Yesterday','Week','Month','Custom'].forEach((t) => {
+    const btn = el(`act${t}`);
+    if (btn) btn.classList.toggle('active', tab === t.toLowerCase());
+  });
+  el('actCustomPanel').classList.toggle('hidden', tab !== 'custom');
+  if (tab !== 'custom') reloadActivity();
+}
+
+function applyActivityCustom() {
+  actCustomStart = el('actFromDate').value;
+  actCustomEnd   = el('actToDate').value;
+  if (!actCustomStart || !actCustomEnd) return;
+  if (actCustomStart > actCustomEnd) { alert('Start date must be on or before end date.'); return; }
+  reloadActivity();
+}
+
+function reloadActivity() {
+  actTripOffset = 0;
+  loadActivitySummary();
+  loadActivityTrips(false);
+}
+
+function buildActivityParams() {
+  const params = new URLSearchParams();
+  const drv = el('actFilterDriver')?.value;
+  const tx  = el('actFilterTaxi')?.value;
+  const pm  = el('actFilterPayment')?.value;
+  if (drv) params.set('driver_id',      drv);
+  if (tx)  params.set('taxi_id',        tx);
+  if (pm)  params.set('payment_method', pm);
+
+  if (actTab === 'today') {
+    // earnData may not be loaded — compute today from time utils pattern: use SAST approach
+    params.set('date', actGetSaToday());
+  } else if (actTab === 'yesterday') {
+    params.set('date', actGetSaYesterday());
+  } else if (actTab === 'week') {
+    const { start, end } = actGetSaWeek();
+    params.set('start_date', start);
+    params.set('end_date',   end);
+  } else if (actTab === 'month') {
+    const { start, end } = actGetSaMonth();
+    params.set('start_date', start);
+    params.set('end_date',   end);
+  } else if (actTab === 'custom' && actCustomStart && actCustomEnd) {
+    params.set('start_date', actCustomStart);
+    params.set('end_date',   actCustomEnd);
+  }
+  return params;
+}
+
+// ── SAST date helpers (client-side, mirrors server utils/time.js) ─────────────
+const ACT_SA_OFFSET_MS = 2 * 60 * 60 * 1000; // UTC+2
+
+function actSaNow() { return new Date(Date.now() + ACT_SA_OFFSET_MS); }
+
+function actFmt(d) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function actGetSaToday()     { return actFmt(actSaNow()); }
+function actGetSaYesterday() {
+  const d = actSaNow();
+  d.setUTCDate(d.getUTCDate() - 1);
+  return actFmt(d);
+}
+function actGetSaWeek() {
+  const now = actSaNow();
+  const dow = (now.getUTCDay() + 6) % 7; // Mon=0
+  const mon = new Date(now); mon.setUTCDate(now.getUTCDate() - dow);
+  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+  return { start: actFmt(mon), end: actFmt(sun) };
+}
+function actGetSaMonth() {
+  const now = actSaNow();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  return { start: actFmt(start), end: actFmt(end) };
+}
+
+// ── Period label helper ────────────────────────────────────────────────────────
+function actPeriodLabel() {
+  if (actTab === 'today')     return 'Today — ' + formatSADate(actGetSaToday()).long;
+  if (actTab === 'yesterday') return 'Yesterday — ' + formatSADate(actGetSaYesterday()).long;
+  if (actTab === 'week') {
+    const { start, end } = actGetSaWeek();
+    return `This week — ${formatSADate(start).short} – ${formatSADate(end).short}`;
+  }
+  if (actTab === 'month') {
+    const { start, end } = actGetSaMonth();
+    return `This month — ${formatSADate(start).short} – ${formatSADate(end).short}`;
+  }
+  if (actCustomStart && actCustomEnd) {
+    return `${formatSADate(actCustomStart).short} – ${formatSADate(actCustomEnd).short}`;
+  }
+  return 'Custom range';
+}
+
+async function loadActivitySummary() {
+  el('actSummaryLoading').classList.remove('hidden');
+  el('actSummaryBody').classList.add('hidden');
+
+  try {
+    const params = buildActivityParams();
+    const res  = await fetch(`/api/owner/${owner.id}/trips/summary?${params}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const s = await res.json();
+
+    el('actSumTrips').textContent = s.total_trips;
+    el('actSumTotal').textContent = 'R' + Number(s.total_fare).toFixed(0);
+    el('actSumAvg').textContent   = 'R' + Number(s.avg_fare).toFixed(2);
+    el('actSumCash').textContent  = 'R' + Number(s.cash_total).toFixed(0);
+    el('actSumEft').textContent   = 'R' + Number(s.eft_total).toFixed(0);
+    el('actSumOther').textContent = 'R' + Number(s.other_total).toFixed(0);
+
+    el('actSummaryLoading').classList.add('hidden');
+    el('actSummaryBody').classList.remove('hidden');
+  } catch (_) { /* silent */ }
+}
+
+function renderActivityTripCard(t) {
+  const { dateShort, time } = formatSADateTime(t.created_at);
+  const pm = (t.payment_method || 'CASH').toLowerCase();
+  return `
+    <div class="trip-card act-trip-card" onclick="openActTripDetail(${t.id})" style="cursor:pointer;">
+      <div class="trip-card-hdr">
+        <span class="trip-card-dt">${escapeHtml(dateShort)} · ${escapeHtml(time)}</span>
+        <span class="trip-card-fare">R${Number(t.fare).toFixed(0)}</span>
+      </div>
+      <div class="trip-card-meta">
+        <span>👤 ${escapeHtml(t.driver_name || '—')}</span>
+        <span>🚐 ${escapeHtml(t.taxi_plate  || '—')}</span>
+        <span class="badge-pay badge-pay-${pm}">${escapeHtml(t.payment_method || 'CASH')}</span>
+      </div>
+      <div class="trip-card-route">
+        📍 <strong>${escapeHtml(t.from_location || '—')}</strong>
+        <span style="color:var(--muted);margin:0 4px;">→</span>
+        <strong>${escapeHtml(t.to_location || '—')}</strong>
+      </div>
+    </div>`;
+}
+
+// Local cache of trips so we can show detail without a second fetch
+let actTripCache = {};
+
+async function loadActivityTrips(append) {
+  if (!append) {
+    el('actTripList').innerHTML = '<p class="muted">Loading trips…</p>';
+    el('actLoadMoreBtn').classList.add('hidden');
+    actTripCache = {};
+  }
+
+  try {
+    const params = buildActivityParams();
+    params.set('limit',  ACT_PAGE);
+    params.set('offset', actTripOffset);
+
+    const res   = await fetch(`/api/owner/${owner.id}/trips?${params}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const trips = await res.json();
+
+    if (!append && !trips.length) {
+      el('actTripList').innerHTML = '<p class="muted">No trips found for this period.</p>';
+      el('actLoadMoreBtn').classList.add('hidden');
+      return;
+    }
+    if (!append) el('actTripList').innerHTML = '';
+
+    trips.forEach((t) => {
+      actTripCache[t.id] = t;
+      const div = document.createElement('div');
+      div.innerHTML = renderActivityTripCard(t);
+      el('actTripList').appendChild(div.firstElementChild);
+    });
+
+    el('actLoadMoreBtn').classList.toggle('hidden', trips.length < ACT_PAGE);
+  } catch (_) { /* silent */ }
+}
+
+function openActTripDetail(tripId) {
+  const t = actTripCache[tripId];
+  if (!t) return;
+  const { date, time } = formatSADateTime(t.created_at);
+  const pm = (t.payment_method || 'CASH').toLowerCase();
+
+  let shiftHtml = '';
+  if (t.shift_start) {
+    const ss = formatSADateTime(t.shift_start);
+    const se = t.shift_end ? formatSADateTime(t.shift_end) : null;
+    shiftHtml = `
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Shift start</span>
+        <span class="trip-detail-val">${escapeHtml(ss.dateShort)} · ${escapeHtml(ss.time)}</span>
+      </div>
+      ${se ? `<div class="trip-detail-row">
+        <span class="trip-detail-lbl">Shift end</span>
+        <span class="trip-detail-val">${escapeHtml(se.dateShort)} · ${escapeHtml(se.time)}</span>
+      </div>` : ''}`;
+  }
+
+  el('actTripModalBody').innerHTML = `
+    <div class="trip-detail-section">
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Date</span>
+        <span class="trip-detail-val">${escapeHtml(date)}</span>
+      </div>
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Time</span>
+        <span class="trip-detail-val">${escapeHtml(time)}</span>
+      </div>
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Driver</span>
+        <span class="trip-detail-val">👤 ${escapeHtml(t.driver_name || '—')}</span>
+      </div>
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Taxi</span>
+        <span class="trip-detail-val">🚐 ${escapeHtml(t.taxi_plate || '—')}</span>
+      </div>
+    </div>
+    <div class="trip-detail-section">
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">From</span>
+        <span class="trip-detail-val">📍 ${escapeHtml(t.from_location || '—')}</span>
+      </div>
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">To</span>
+        <span class="trip-detail-val">🏁 ${escapeHtml(t.to_location || '—')}</span>
+      </div>
+    </div>
+    <div class="trip-detail-section">
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Fare</span>
+        <span class="trip-detail-val" style="font-size:22px;font-weight:800;color:var(--green);">R${Number(t.fare).toFixed(2)}</span>
+      </div>
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Payment</span>
+        <span class="trip-detail-val"><span class="badge-pay badge-pay-${pm}">${escapeHtml(t.payment_method || 'CASH')}</span></span>
+      </div>
+    </div>
+    ${shiftHtml ? `<div class="trip-detail-section">${shiftHtml}</div>` : ''}
+    <div class="trip-detail-section">
+      <div class="trip-detail-row">
+        <span class="trip-detail-lbl">Trip ID</span>
+        <span class="trip-detail-val muted" style="font-size:11px;">#${t.id}</span>
+      </div>
+    </div>`;
+  el('actTripModal').classList.remove('hidden');
+}
+
+function closeActTripModal() { el('actTripModal').classList.add('hidden'); }
+function actModalBackdropClick(e) {
+  if (e.target === el('actTripModal')) closeActTripModal();
 }
 
 // ── Other sections ────────────────────────────────────────────────────────────

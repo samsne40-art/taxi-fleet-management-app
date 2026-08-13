@@ -113,12 +113,32 @@
       </div>
     </section>
 
-    <!-- Trip History -->
+    <!-- My Trip History -->
     <section class="card" id="historyCard">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <h2 style="margin:0;font-size:16px;">📋 Trip History</h2>
-        <button class="section-action-btn" onclick="loadTripHistory()" style="font-size:12px;">↻ Refresh</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <h2 style="margin:0;font-size:16px;">📋 My Trip History</h2>
+        <button class="section-action-btn" onclick="histReload()" style="font-size:12px;">↻ Refresh</button>
       </div>
+
+      <!-- Period filter tabs -->
+      <div class="earn-tabs" style="margin-bottom:10px;">
+        <button class="earn-tab active" id="histTabAll"   onclick="setHistTab('all')">All</button>
+        <button class="earn-tab"        id="histTabToday" onclick="setHistTab('today')">Today</button>
+        <button class="earn-tab"        id="histTabWeek"  onclick="setHistTab('week')">This Week</button>
+        <button class="earn-tab"        id="histTabMonth" onclick="setHistTab('month')">This Month</button>
+      </div>
+
+      <!-- Period summary bar -->
+      <div id="histSummaryBar" class="hist-summary-bar hidden">
+        <span class="hist-sum-item"><strong id="histSumTrips">0</strong> trips</span>
+        <span class="hist-sum-sep">·</span>
+        <span class="hist-sum-item">R<strong id="histSumTotal">0</strong></span>
+        <span class="hist-sum-sep">·</span>
+        <span class="hist-sum-item hist-cash">💵 R<strong id="histSumCash">0</strong></span>
+        <span class="hist-sum-item hist-eft">🏦 R<strong id="histSumEft">0</strong></span>
+        <span class="hist-sum-item hist-other">💳 R<strong id="histSumOther">0</strong></span>
+      </div>
+
       <div id="tripHistoryList"><p class="muted">No trips recorded yet.</p></div>
       <button id="loadMoreTripsBtn" class="secondary hidden" onclick="loadMoreTrips()" style="margin-top:8px;font-size:13px;">Load more</button>
     </section>

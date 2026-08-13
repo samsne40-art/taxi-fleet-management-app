@@ -690,3 +690,66 @@ main { max-width: 760px; margin: 0 auto; padding: 16px; }
 .badge-pay-cash  { background: #e4f6ea; color: var(--green); }
 .badge-pay-eft   { background: #e8f0fe; color: #1a73e8; }
 .badge-pay-other { background: #fff8e6; color: #b07d00; }
+
+/* ══════════════════════════════════════════ ACTIVITY SECTION (Owner) ══ */
+.act-summary-card {
+  background: linear-gradient(135deg, #0a7d3c 0%, #065c2d 100%);
+  color: #fff;
+  border: none;
+}
+.act-summary-loading { color: rgba(255,255,255,.7); font-size: 13px; }
+.act-summary-row {
+  display: flex;
+  gap: 0;
+  justify-content: space-around;
+  margin-bottom: 12px;
+}
+.act-sum-stat { text-align: center; flex: 1; }
+.act-sum-num  { font-size: 22px; font-weight: 800; color: #fff; }
+.act-sum-lbl  { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 2px; }
+.act-pay-row  { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.act-pay-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+}
+.act-trip-card { transition: background .15s; }
+.act-trip-card:hover { background: #f4f6f5; }
+
+/* Trip detail modal content */
+.trip-detail-section {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+  margin-bottom: 4px;
+}
+.trip-detail-section:last-child { border-bottom: none; }
+.trip-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+}
+.trip-detail-lbl { font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
+.trip-detail-val { font-size: 14px; font-weight: 600; text-align: right; }
+
+/* ══════════════════════════════════════════ DRIVER HISTORY BAR ══ */
+.hist-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  background: #f0f7f3;
+  border: 1px solid #c5e0d1;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.hist-sum-item  { color: var(--text); }
+.hist-sum-sep   { color: var(--muted); }
+.hist-cash      { color: var(--green); }
+.hist-eft       { color: #1a73e8; }
+.hist-other     { color: #b07d00; }

@@ -189,32 +189,81 @@ router.post('/:driverId/trip', requireDriver, (req, res) => {
 
 // ── Driver trip history ───────────────────────────────────────────────────────
 
-router.get('/:driverId/trips', requireDriver, (req, res) => {
-  const driverId = req.session.userId;
-  const { date, start_date, end_date } = req.query;
-  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+// Helper: build WHERE extra clause + params for driver trip filters.
+function buildDriverTripFilters(query) {
+  const { date, start_date, end_date, payment_method } = query;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const VALID_PM = ['CASH', 'EFT', 'OTHER'];
 
-  const params = [driverId];
+  const params = [];
   let extra = '';
 
+  if (payment_method) {
+    const pm = payment_method.toUpperCase();
+    if (!VALID_PM.includes(pm)) return null;
+    extra += ' AND t.payment_method=?'; params.push(pm);
+  }
+
   if (date) {
-    extra += " AND date(t.created_at,'+2 hours') = ?";
-    params.push(date);
-  } else if (start_date && end_date) {
+    if (!DATE_RE.test(date)) return null;
+    extra += " AND date(t.created_at,'+2 hours') = ?"; params.push(date);
+  } else if (start_date || end_date) {
+    if (!start_date || !end_date) return null;
+    if (!DATE_RE.test(start_date) || !DATE_RE.test(end_date)) return null;
+    if (start_date > end_date) return null;
     extra += " AND date(t.created_at,'+2 hours') >= ? AND date(t.created_at,'+2 hours') <= ?";
     params.push(start_date, end_date);
   }
+
+  return { extra, params };
+}
+
+router.get('/:driverId/trips', requireDriver, (req, res) => {
+  const driverId = req.session.userId;
+  const limit  = Math.min(parseInt(req.query.limit,  10) || 50, 200);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0,  0);
+
+  const filters = buildDriverTripFilters(req.query);
+  if (!filters) return res.status(400).json({ error: 'Invalid filter parameters' });
+
+  const params = [driverId, ...filters.params];
 
   const rows = db.prepare(`
     SELECT t.id, t.from_location, t.to_location, t.fare, t.payment_method, t.created_at,
            tx.plate AS taxi_plate
     FROM trips t
     LEFT JOIN taxis tx ON tx.id = t.taxi_id
-    WHERE t.driver_id = ? ${extra}
-    ORDER BY t.created_at DESC LIMIT ${limit}
+    WHERE t.driver_id = ? ${filters.extra}
+    ORDER BY t.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
   `).all(...params);
 
   res.json(rows);
+});
+
+// ── Driver trip summary — totals for a filtered period ────────────────────────
+
+router.get('/:driverId/trips/summary', requireDriver, (req, res) => {
+  const driverId = req.session.userId;
+
+  const filters = buildDriverTripFilters(req.query);
+  if (!filters) return res.status(400).json({ error: 'Invalid filter parameters' });
+
+  const params = [driverId, ...filters.params];
+
+  const row = db.prepare(`
+    SELECT
+      COUNT(*)                                                        AS total_trips,
+      COALESCE(SUM(t.fare), 0)                                        AS total_fare,
+      COALESCE(SUM(CASE WHEN t.payment_method='CASH'  THEN t.fare ELSE 0 END), 0) AS cash_total,
+      COALESCE(SUM(CASE WHEN t.payment_method='EFT'   THEN t.fare ELSE 0 END), 0) AS eft_total,
+      COALESCE(SUM(CASE WHEN t.payment_method='OTHER' THEN t.fare ELSE 0 END), 0) AS other_total,
+      CASE WHEN COUNT(*) > 0 THEN ROUND(SUM(t.fare) / COUNT(*), 2) ELSE 0 END     AS avg_fare
+    FROM trips t
+    WHERE t.driver_id = ? ${filters.extra}
+  `).get(...params);
+
+  res.json(row);
 });
 
 // ── Driver earnings — proper SAST periods ────────────────────────────────────

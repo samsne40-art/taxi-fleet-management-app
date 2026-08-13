@@ -17,8 +17,10 @@ const MIN_DISTANCE_M  = 30;
 // Trip entry state
 let selectedPayment = 'CASH';
 
-// History pagination
+// History pagination & filter state
 let tripHistoryLoaded = 0;
+let histTripOffset    = 0;
+let histTab           = 'all';
 const TRIP_PAGE = 20;
 
 // ─── SAST date/time helpers ───────────────────────────────────────────────────
@@ -518,39 +520,124 @@ async function loadEarnings() {
   } catch (_) { /* silent — network error */ }
 }
 
-// ─── Trip History ─────────────────────────────────────────────────────────────
+// ─── Trip History (with date filters & offset pagination) ─────────────────────
+
+// SAST date helpers (mirrors server utils/time.js and owner/app.js)
+const HIST_SA_OFFSET_MS = 2 * 60 * 60 * 1000;
+function histSaNow() { return new Date(Date.now() + HIST_SA_OFFSET_MS); }
+function histFmt(d) {
+  const y   = d.getUTCFullYear();
+  const m   = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function histGetToday() { return histFmt(histSaNow()); }
+function histGetWeek()  {
+  const now = histSaNow();
+  const dow = (now.getUTCDay() + 6) % 7; // Mon=0
+  const mon = new Date(now); mon.setUTCDate(now.getUTCDate() - dow);
+  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+  return { start: histFmt(mon), end: histFmt(sun) };
+}
+function histGetMonth() {
+  const now = histSaNow();
+  const s = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const e = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  return { start: histFmt(s), end: histFmt(e) };
+}
+
+function buildHistParams(offset) {
+  const p = new URLSearchParams({ limit: TRIP_PAGE, offset: offset || 0 });
+  if (histTab === 'today') {
+    p.set('date', histGetToday());
+  } else if (histTab === 'week') {
+    const { start, end } = histGetWeek();
+    p.set('start_date', start); p.set('end_date', end);
+  } else if (histTab === 'month') {
+    const { start, end } = histGetMonth();
+    p.set('start_date', start); p.set('end_date', end);
+  }
+  return p;
+}
+
+function setHistTab(tab) {
+  histTab = tab;
+  ['All','Today','Week','Month'].forEach((t) => {
+    const btn = document.getElementById(`histTab${t}`);
+    if (btn) btn.classList.toggle('active', tab === t.toLowerCase());
+  });
+  histReload();
+}
+
+function histReload() {
+  histTripOffset = 0;
+  loadHistSummary();
+  loadTripHistory();
+}
+
+async function loadHistSummary() {
+  const bar = document.getElementById('histSummaryBar');
+  if (histTab === 'all') { bar.classList.add('hidden'); return; }
+
+  try {
+    const p = buildHistParams(0);
+    // Remove limit/offset for summary endpoint
+    const sp = new URLSearchParams();
+    if (p.get('date'))       sp.set('date', p.get('date'));
+    if (p.get('start_date')) sp.set('start_date', p.get('start_date'));
+    if (p.get('end_date'))   sp.set('end_date', p.get('end_date'));
+
+    const res = await fetch(`/api/driver/${driver.id}/trips/summary?${sp}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const s = await res.json();
+
+    document.getElementById('histSumTrips').textContent = s.total_trips;
+    document.getElementById('histSumTotal').textContent = Number(s.total_fare).toFixed(0);
+    document.getElementById('histSumCash').textContent  = Number(s.cash_total).toFixed(0);
+    document.getElementById('histSumEft').textContent   = Number(s.eft_total).toFixed(0);
+    document.getElementById('histSumOther').textContent = Number(s.other_total).toFixed(0);
+    bar.classList.remove('hidden');
+  } catch (_) { /* silent */ }
+}
 
 async function loadTripHistory() {
+  histTripOffset = 0;
   tripHistoryLoaded = TRIP_PAGE;
+  const list = document.getElementById('tripHistoryList');
+  const more = document.getElementById('loadMoreTripsBtn');
+  list.innerHTML = '<p class="muted">Loading…</p>';
+  more.classList.add('hidden');
+
   try {
-    const res = await fetch(`/api/driver/${driver.id}/trips?limit=${TRIP_PAGE}`, { credentials: 'include' });
+    const res = await fetch(`/api/driver/${driver.id}/trips?${buildHistParams(0)}`, { credentials: 'include' });
     if (!res.ok) return;
     const trips = await res.json();
-    renderTripHistory(trips);
+    renderTripHistory(trips, false);
   } catch (_) { /* silent */ }
 }
 
 async function loadMoreTrips() {
+  histTripOffset += TRIP_PAGE;
   tripHistoryLoaded += TRIP_PAGE;
   try {
-    const res = await fetch(`/api/driver/${driver.id}/trips?limit=${tripHistoryLoaded}`, { credentials: 'include' });
+    const res = await fetch(`/api/driver/${driver.id}/trips?${buildHistParams(histTripOffset)}`, { credentials: 'include' });
     if (!res.ok) return;
     const trips = await res.json();
-    renderTripHistory(trips);
+    renderTripHistory(trips, true);
   } catch (_) { /* silent */ }
 }
 
-function renderTripHistory(trips) {
+function renderTripHistory(trips, append) {
   const list = document.getElementById('tripHistoryList');
   const more = document.getElementById('loadMoreTripsBtn');
 
-  if (!trips || !trips.length) {
+  if (!append && (!trips || !trips.length)) {
     list.innerHTML = '<p class="muted">No trips recorded yet.</p>';
     more.classList.add('hidden');
     return;
   }
 
-  list.innerHTML = trips.map((t) => {
+  const html = (trips || []).map((t) => {
     const { dateShort, time } = formatSADateTime(t.created_at);
     const pm = (t.payment_method || 'CASH').toLowerCase();
     return `
@@ -572,8 +659,14 @@ function renderTripHistory(trips) {
       </div>`;
   }).join('');
 
-  // Show "Load more" if there might be additional trips
-  more.classList.toggle('hidden', trips.length < tripHistoryLoaded);
+  if (append) {
+    list.insertAdjacentHTML('beforeend', html);
+  } else {
+    list.innerHTML = html;
+  }
+
+  // Show "Load more" only if a full page was returned (meaning there may be more)
+  more.classList.toggle('hidden', (trips || []).length < TRIP_PAGE);
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────

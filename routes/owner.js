@@ -440,39 +440,108 @@ router.get('/:ownerId/earnings', requireOwner, (req, res) => {
   });
 });
 
-// ── Owner Trip History — filterable ──────────────────────────────────────────
+// ── Owner Trip History — filterable, paginated ────────────────────────────────
 
-router.get('/:ownerId/trips', requireOwner, (req, res) => {
-  const ownerId = req.params.ownerId;
-  const { driver_id, taxi_id, date, start_date, end_date, payment_method } = req.query;
-  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+// Helper: build WHERE extra clause + params array for trip filters (owner scope).
+// Returns { extra: string, params: Array } — caller prepends ownerId as first param.
+function buildOwnerTripFilters(query) {
+  const { driver_id, taxi_id, date, start_date, end_date, payment_method } = query;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const VALID_PM = ['CASH', 'EFT', 'OTHER'];
 
-  const params = [ownerId];
+  const params = [];
   let extra = '';
 
-  if (driver_id)      { extra += ' AND t.driver_id=?';                                                   params.push(driver_id); }
-  if (taxi_id)        { extra += ' AND t.taxi_id=?';                                                      params.push(taxi_id); }
-  if (payment_method) { extra += ' AND t.payment_method=?';                                               params.push(payment_method.toUpperCase()); }
+  // driver_id / taxi_id — must be positive integers; ownership enforced by WHERE owner_id=?
+  if (driver_id) {
+    const d = parseInt(driver_id, 10);
+    if (isNaN(d) || d <= 0) return null; // signal bad input
+    extra += ' AND t.driver_id=?'; params.push(d);
+  }
+  if (taxi_id) {
+    const x = parseInt(taxi_id, 10);
+    if (isNaN(x) || x <= 0) return null;
+    extra += ' AND t.taxi_id=?'; params.push(x);
+  }
+
+  // payment_method — allowlist
+  if (payment_method) {
+    const pm = payment_method.toUpperCase();
+    if (!VALID_PM.includes(pm)) return null;
+    extra += ' AND t.payment_method=?'; params.push(pm);
+  }
+
+  // date filters — validate format
   if (date) {
+    if (!DATE_RE.test(date)) return null;
     extra += " AND date(t.created_at,'+2 hours')=?"; params.push(date);
-  } else if (start_date && end_date) {
+  } else if (start_date || end_date) {
+    if (!start_date || !end_date) return null;
+    if (!DATE_RE.test(start_date) || !DATE_RE.test(end_date)) return null;
+    if (start_date > end_date) return null;
     extra += " AND date(t.created_at,'+2 hours')>=? AND date(t.created_at,'+2 hours')<=?";
     params.push(start_date, end_date);
   }
 
+  return { extra, params };
+}
+
+router.get('/:ownerId/trips', requireOwner, (req, res) => {
+  const ownerId = parseInt(req.params.ownerId, 10);
+  const limit  = Math.min(parseInt(req.query.limit, 10)  || 50,  200);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0,   0);
+
+  const filters = buildOwnerTripFilters(req.query);
+  if (!filters) return res.status(400).json({ error: 'Invalid filter parameters' });
+
+  const params = [ownerId, ...filters.params];
+
   const rows = db.prepare(`
     SELECT t.id, t.fare, t.from_location, t.to_location, t.payment_method, t.created_at,
-           d.name  AS driver_name,
-           tx.plate AS taxi_plate
+           d.name   AS driver_name,
+           d.id     AS driver_id,
+           tx.plate AS taxi_plate,
+           tx.id    AS taxi_id,
+           s.start_time AS shift_start,
+           s.end_time   AS shift_end
     FROM trips t
     LEFT JOIN drivers d  ON d.id  = t.driver_id
     LEFT JOIN taxis   tx ON tx.id = t.taxi_id
-    WHERE t.owner_id=? ${extra}
+    LEFT JOIN shifts  s  ON s.id  = t.shift_id
+    WHERE t.owner_id=? ${filters.extra}
     ORDER BY t.created_at DESC
-    LIMIT ${limit}
+    LIMIT ${limit} OFFSET ${offset}
   `).all(...params);
 
   res.json(rows);
+});
+
+// ── Owner Trip Summary — totals for the filtered period ──────────────────────
+
+router.get('/:ownerId/trips/summary', requireOwner, (req, res) => {
+  const ownerId = parseInt(req.params.ownerId, 10);
+
+  const filters = buildOwnerTripFilters(req.query);
+  if (!filters) return res.status(400).json({ error: 'Invalid filter parameters' });
+
+  const params = [ownerId, ...filters.params];
+
+  const row = db.prepare(`
+    SELECT
+      COUNT(*)                                                        AS total_trips,
+      COALESCE(SUM(t.fare), 0)                                        AS total_fare,
+      COALESCE(SUM(CASE WHEN t.payment_method='CASH'  THEN t.fare ELSE 0 END), 0) AS cash_total,
+      COALESCE(SUM(CASE WHEN t.payment_method='EFT'   THEN t.fare ELSE 0 END), 0) AS eft_total,
+      COALESCE(SUM(CASE WHEN t.payment_method='OTHER' THEN t.fare ELSE 0 END), 0) AS other_total,
+      CASE WHEN COUNT(*) > 0 THEN ROUND(SUM(t.fare) / COUNT(*), 2) ELSE 0 END     AS avg_fare,
+      COUNT(CASE WHEN t.payment_method='CASH'  THEN 1 END)           AS cash_trips,
+      COUNT(CASE WHEN t.payment_method='EFT'   THEN 1 END)           AS eft_trips,
+      COUNT(CASE WHEN t.payment_method='OTHER' THEN 1 END)           AS other_trips
+    FROM trips t
+    WHERE t.owner_id=? ${filters.extra}
+  `).get(...params);
+
+  res.json(row);
 });
 
 // ── Feedback ──────────────────────────────────────────────────────────────────

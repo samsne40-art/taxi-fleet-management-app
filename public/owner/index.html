@@ -68,6 +68,9 @@
       <button class="snav-btn" onclick="showSection('fleet')">
         <span class="snav-icon">📍</span> Live Fleet
       </button>
+      <button class="snav-btn" onclick="showSection('activity')">
+        <span class="snav-icon">📋</span> Activity
+      </button>
       <button class="snav-btn" onclick="showSection('earnings')">
         <span class="snav-icon">💰</span> Earnings
       </button>
@@ -144,6 +147,10 @@
         <button class="cc-card cc-card--green" onclick="showSection('fleet')">
           <span class="cc-icon">📍</span>
           <span class="cc-label">Live Fleet</span>
+        </button>
+        <button class="cc-card" onclick="showSection('activity')">
+          <span class="cc-icon">📋</span>
+          <span class="cc-label">Activity</span>
         </button>
         <button class="cc-card" onclick="showSection('earnings')">
           <span class="cc-icon">💰</span>
@@ -312,7 +319,95 @@
       </div>
     </section>
 
-    <!-- ── 4. LIVE FLEET ────────────────────────────────────────── -->
+    <!-- ── 4. ACTIVITY / TRIP HISTORY ─────────────────────────── -->
+    <section class="section-panel hidden" id="section-activity">
+      <div class="section-hdr">
+        <button class="section-back" onclick="showHome()">&#8592; Home</button>
+        <h2 class="section-title">📋 Activity / Trip History</h2>
+        <button class="section-action-btn" onclick="reloadActivity()">↻</button>
+      </div>
+
+      <div class="sp-body">
+
+        <!-- Period filter tabs -->
+        <div class="earn-tabs">
+          <button class="earn-tab active" id="actToday"     onclick="setActivityTab('today')">Today</button>
+          <button class="earn-tab"        id="actYesterday" onclick="setActivityTab('yesterday')">Yesterday</button>
+          <button class="earn-tab"        id="actWeek"      onclick="setActivityTab('week')">This Week</button>
+          <button class="earn-tab"        id="actMonth"     onclick="setActivityTab('month')">This Month</button>
+          <button class="earn-tab"        id="actCustom"    onclick="setActivityTab('custom')">Custom</button>
+        </div>
+
+        <!-- Custom date range panel -->
+        <div id="actCustomPanel" class="card hidden">
+          <h3 class="card-subh">Custom date range</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:130px;">
+              <label class="field-label">From</label>
+              <input type="date" id="actFromDate" style="margin:0;">
+            </div>
+            <div style="flex:1;min-width:130px;">
+              <label class="field-label">To</label>
+              <input type="date" id="actToDate" style="margin:0;">
+            </div>
+          </div>
+          <button onclick="applyActivityCustom()" style="margin-top:10px;">Apply</button>
+        </div>
+
+        <!-- Narrow filters: driver / taxi / payment -->
+        <div class="card" style="padding:12px 14px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="actFilterDriver" onchange="reloadActivity()" style="flex:1;min-width:130px;margin:0;font-size:13px;padding:8px;">
+              <option value="">All drivers</option>
+            </select>
+            <select id="actFilterTaxi" onchange="reloadActivity()" style="flex:1;min-width:130px;margin:0;font-size:13px;padding:8px;">
+              <option value="">All taxis</option>
+            </select>
+            <select id="actFilterPayment" onchange="reloadActivity()" style="flex:1;min-width:110px;margin:0;font-size:13px;padding:8px;">
+              <option value="">All payment methods</option>
+              <option value="CASH">Cash</option>
+              <option value="EFT">EFT</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Totals summary card -->
+        <div class="card act-summary-card" id="actSummaryCard">
+          <div class="act-summary-loading" id="actSummaryLoading">Loading…</div>
+          <div id="actSummaryBody" class="hidden">
+            <div class="act-summary-row">
+              <div class="act-sum-stat">
+                <div class="act-sum-num" id="actSumTrips">–</div>
+                <div class="act-sum-lbl">Trips</div>
+              </div>
+              <div class="act-sum-stat">
+                <div class="act-sum-num" id="actSumTotal">R–</div>
+                <div class="act-sum-lbl">Total</div>
+              </div>
+              <div class="act-sum-stat">
+                <div class="act-sum-num" id="actSumAvg">R–</div>
+                <div class="act-sum-lbl">Avg fare</div>
+              </div>
+            </div>
+            <div class="act-pay-row">
+              <span class="act-pay-chip act-pay-cash">💵 Cash <strong id="actSumCash">R–</strong></span>
+              <span class="act-pay-chip act-pay-eft">🏦 EFT <strong id="actSumEft">R–</strong></span>
+              <span class="act-pay-chip act-pay-other">💳 Other <strong id="actSumOther">R–</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trip list -->
+        <div class="card">
+          <div id="actTripList"><p class="muted">Loading trips…</p></div>
+          <button id="actLoadMoreBtn" class="secondary hidden" onclick="loadMoreActivityTrips()" style="margin-top:8px;font-size:13px;">Load more</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── 5. LIVE FLEET ────────────────────────────────────────── -->
     <section class="section-panel hidden" id="section-fleet">
       <div class="section-hdr">
         <button class="section-back" onclick="showHome()">&#8592; Home</button>
@@ -532,6 +627,18 @@
 
   </div><!-- /owner-main -->
 </div><!-- /ownerApp -->
+
+<!-- ── TRIP DETAIL MODAL (Activity section) ───────────────────────────────── -->
+<div id="actTripModal" class="modal-overlay hidden" onclick="actModalBackdropClick(event)">
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <h3>Trip Details</h3>
+      <button class="modal-close-btn" onclick="closeActTripModal()">✕</button>
+    </div>
+    <div class="modal-body" id="actTripModalBody">
+    </div>
+  </div>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/owner/app.js"></script>
