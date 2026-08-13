@@ -1,1 +1,2 @@
 - [Security fixes](security-fixes.md) — 14 vulnerabilities patched; combined test suite order matters (brute-force must run last).
+- [Rate-limiter design](rate-limiter-design.md) — custom post-response counter replaced express-rate-limit; env vars LOGIN_RATE_MAX / LOGIN_RATE_WINDOW_MS; owner+driver stores are fully independent.

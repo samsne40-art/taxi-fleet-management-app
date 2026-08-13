@@ -5,7 +5,6 @@ const session = require('express-session');
 const { Server } = require('socket.io');
 const path = require('path');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
@@ -124,20 +123,73 @@ io.on('connection', (socket) => {
 });
 
 // ---------- Rate limiting ----------
-// 10 failed attempts per 15-minute window per IP, tracked separately per endpoint.
-// skipSuccessfulRequests: true — only failed logins count toward the limit so
-// that legitimate users are never locked out by their own correct credentials.
+// Custom post-response failure counter.
+//
+// Why not express-rate-limit with skipSuccessfulRequests?
+//   express-rate-limit increments the counter BEFORE the route handler runs.
+//   Once the counter >= max, the 429 fires before credentials are checked —
+//   so even a correct password gets blocked.  skipSuccessfulRequests can
+//   prevent successes from adding to the count but cannot rescue a request
+//   that is already over the limit.
+//
+// This implementation wraps res.json and counts only AFTER the handler
+// responds:
+//   - status >= 400  → record a failure timestamp for the IP
+//   - status < 400   → clear all failure timestamps for the IP (login OK)
+//
+// Each call to makeLoginLimiter() returns an independent middleware with its
+// own in-memory store, so owner and driver endpoints never share state.
+//
+// Configurable via environment variables (useful in development):
+//   LOGIN_RATE_WINDOW_MS  — window length in ms   (default: 900000 = 15 min)
+//   LOGIN_RATE_MAX        — max failures in window (default: 10)
+
 function makeLoginLimiter() {
-  return rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    skipSuccessfulRequests: true,
-    message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
-  });
+  const windowMs = parseInt(process.env.LOGIN_RATE_WINDOW_MS, 10) || 15 * 60 * 1000;
+  const max      = parseInt(process.env.LOGIN_RATE_MAX,        10) || 10;
+
+  // ip → [timestamp, …]  (only failure timestamps are stored)
+  const store = new Map();
+
+  function failureCount(ip) {
+    const cutoff = Date.now() - windowMs;
+    const times  = (store.get(ip) || []).filter(t => t > cutoff);
+    if (times.length === 0) store.delete(ip);
+    else store.set(ip, times);
+    return times.length;
+  }
+
+  return (req, res, next) => {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+
+    // Pre-check: block if already at/over the limit
+    if (failureCount(ip) >= max) {
+      res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+      return res.status(429).json({
+        error: `Too many failed login attempts. Please try again in ${Math.ceil(windowMs / 60000)} minute(s).`,
+      });
+    }
+
+    // Count only AFTER the response is sent, based on status code.
+    // Using res.on('finish') is more robust than wrapping res.json — it fires
+    // regardless of which send method the route uses.
+    res.on('finish', () => {
+      if (res.statusCode >= 400) {
+        // Failed login — record the timestamp
+        const times = store.get(ip) || [];
+        times.push(Date.now());
+        store.set(ip, times);
+      } else {
+        // Successful login — wipe this IP's failure history
+        store.delete(ip);
+      }
+    });
+
+    next();
+  };
 }
-app.use('/api/owner/login', makeLoginLimiter());
+
+app.use('/api/owner/login',  makeLoginLimiter());
 app.use('/api/driver/login', makeLoginLimiter());
 
 // Make io available to route handlers via app.locals
