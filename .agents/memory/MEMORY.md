@@ -1,0 +1,1 @@
+- [Security fixes](security-fixes.md) — 14 vulnerabilities patched; combined test suite order matters (brute-force must run last).

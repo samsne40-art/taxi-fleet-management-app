@@ -2,6 +2,15 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../db');
 
+// Allowed report type values — arbitrary strings are rejected
+const ALLOWED_REPORT_TYPES = [
+  'unsafe driving',
+  'overloading',
+  'rude behaviour',
+  'reckless speeding',
+  'compliment',
+];
+
 function taxiWithDriver(taxi) {
   if (!taxi) return null;
   const driver = db.prepare(
@@ -40,14 +49,22 @@ router.post('/feedback', (req, res) => {
     return res.status(400).json({ error: 'Rating must be a whole number between 1 and 5.' });
   }
 
+  // ── Comment length limit ───────────────────────────────────────────────────
+  if (comment && comment.length > 1000) {
+    return res.status(400).json({ error: 'Comment must be 1000 characters or fewer.' });
+  }
+
+  // ── report_types allowlist ────────────────────────────────────────────────
+  // Filter to only recognised values; unknown strings are silently dropped.
+  const rawTypes = Array.isArray(report_types) ? report_types : [];
+  const types = rawTypes.filter((t) => ALLOWED_REPORT_TYPES.includes(t));
+
   const taxi = db.prepare('SELECT * FROM taxis WHERE id = ?').get(taxi_id);
   if (!taxi) return res.status(404).json({ error: 'Taxi not found.' });
 
   const driver = db.prepare(
     'SELECT * FROM drivers WHERE current_taxi_id = ? AND verification_status = ?'
   ).get(taxi_id, 'approved');
-
-  const types = Array.isArray(report_types) ? report_types : [];
 
   const info = db.prepare(
     'INSERT INTO feedback (taxi_id, driver_id, rating, comment, report_types) VALUES (?, ?, ?, ?, ?)'

@@ -56,7 +56,8 @@ router.post('/register', async (req, res) => {
     res.json(owner);
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'that phone number is already registered' });
-    res.status(500).json({ error: e.message });
+    console.error('[owner register]', e);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
   }
 });
 
@@ -144,7 +145,8 @@ router.post('/:ownerId/drivers', requireOwner, driverUpload, async (req, res) =>
       if (f) fs.unlink(path.join(DOCS_DIR, f.filename), () => {});
     });
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'a driver with that phone number already exists' });
-    res.status(500).json({ error: e.message });
+    console.error('[owner add-driver]', e);
+    res.status(500).json({ error: 'Could not add driver. Please try again.' });
   }
 });
 
@@ -209,9 +211,20 @@ router.post('/:ownerId/drivers/:driverId/verify', requireOwner, (req, res) => {
 });
 
 router.post('/:ownerId/drivers/:driverId/assign', requireOwner, (req, res) => {
-  const { driverId } = req.params;
+  const { ownerId, driverId } = req.params;
   const { taxi_id } = req.body;
-  db.prepare('UPDATE drivers SET current_taxi_id = ? WHERE id = ?').run(taxi_id || null, driverId);
+
+  // Verify that the target driver belongs to this owner
+  const driver = db.prepare('SELECT id FROM drivers WHERE id = ? AND owner_id = ?').get(driverId, ownerId);
+  if (!driver) return res.status(404).json({ error: 'driver not found' });
+
+  // If a taxi is being assigned, verify it also belongs to this owner
+  if (taxi_id) {
+    const taxi = db.prepare('SELECT id FROM taxis WHERE id = ? AND owner_id = ?').get(taxi_id, ownerId);
+    if (!taxi) return res.status(403).json({ error: 'taxi does not belong to you' });
+  }
+
+  db.prepare('UPDATE drivers SET current_taxi_id = ? WHERE id = ? AND owner_id = ?').run(taxi_id || null, driverId, ownerId);
   res.json({ ok: true });
 });
 
@@ -220,6 +233,11 @@ router.post('/:ownerId/message', requireOwner, (req, res) => {
   const { ownerId } = req.params;
   const { driver_id, text } = req.body;
   if (!driver_id || !text) return res.status(400).json({ error: 'driver_id and text required' });
+
+  // Verify the target driver belongs to this owner before sending
+  const driver = db.prepare('SELECT id FROM drivers WHERE id = ? AND owner_id = ?').get(driver_id, ownerId);
+  if (!driver) return res.status(403).json({ error: 'driver not found or does not belong to you' });
+
   db.prepare('INSERT INTO messages (owner_id, driver_id, sender, text) VALUES (?, ?, ?, ?)')
     .run(ownerId, driver_id, 'owner', text);
   req.app.locals.io.to(`driver_${driver_id}`).emit('new_message', { from: 'owner', text });
@@ -471,7 +489,13 @@ router.get('/:ownerId/feedback', requireOwner, (req, res) => {
 });
 
 router.post('/:ownerId/sos/:sosId/resolve', requireOwner, (req, res) => {
-  db.prepare('UPDATE sos_alerts SET resolved = 1 WHERE id = ?').run(req.params.sosId);
+  // Only resolve alerts whose driver belongs to this owner (prevents cross-owner IDOR)
+  const result = db.prepare(`
+    UPDATE sos_alerts SET resolved = 1
+    WHERE id = ?
+      AND driver_id IN (SELECT id FROM drivers WHERE owner_id = ?)
+  `).run(req.params.sosId, req.params.ownerId);
+  if (result.changes === 0) return res.status(404).json({ error: 'SOS alert not found' });
   res.json({ ok: true });
 });
 

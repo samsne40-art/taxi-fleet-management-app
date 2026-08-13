@@ -13,14 +13,14 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'phone and password are required' });
 
   const driver = db.prepare('SELECT * FROM drivers WHERE phone = ?').get(phone);
-  if (!driver)
-    return res.status(401).json({ error: 'no driver registered with that number — ask your owner to add you' });
-  if (!driver.password)
-    return res.status(401).json({ error: 'no password set — ask your owner to re-register your account' });
+  // Use the same error for "not found" and "wrong password" to prevent phone enumeration
+  const AUTH_FAIL = { error: 'Incorrect phone number or password.' };
+  if (!driver || !driver.password)
+    return res.status(401).json(AUTH_FAIL);
 
   const match = await bcrypt.compare(password, driver.password);
   if (!match)
-    return res.status(401).json({ error: 'incorrect phone number or password' });
+    return res.status(401).json(AUTH_FAIL);
 
   if (driver.verification_status !== 'approved') {
     const msgs = {
@@ -158,6 +158,8 @@ router.post('/:driverId/trip', requireDriver, (req, res) => {
   const fareNum = parseFloat(fare);
   if (fare == null || isNaN(fareNum) || fareNum <= 0)
     return res.status(400).json({ error: 'Fare must be a positive number (R)' });
+  if (fareNum > 10000)
+    return res.status(400).json({ error: 'Fare cannot exceed R10,000' });
 
   const VALID_PAYMENTS = ['CASH', 'EFT', 'OTHER'];
   const payment = ((payment_method || 'CASH') + '').trim().toUpperCase();
