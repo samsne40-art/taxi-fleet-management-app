@@ -147,17 +147,11 @@ function boot() {
   socket.on('sos_alert', (alert) => {
     showSosBanner(alert);
     if (activeSection === 'notifications') renderNotifSos();
-    ownerNotifUnread++;
-    updateOwnerNotifBadge();
   });
   socket.on('new_notification', (notif) => {
     ownerNotifUnread++;
     updateOwnerNotifBadge();
     if (activeSection === 'notifications') prependOwnerNotif(notif);
-  });
-  socket.on('new_driver_message', () => {
-    ownerNotifUnread++;
-    updateOwnerNotifBadge();
   });
 
   loadDashboard().then(() => { refreshCCStats(); });

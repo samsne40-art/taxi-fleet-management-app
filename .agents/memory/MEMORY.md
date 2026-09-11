@@ -1,2 +1,4 @@
 - [Security fixes](security-fixes.md) — 14 vulnerabilities patched; combined test suite order matters (brute-force must run last).
 - [Rate-limiter design](rate-limiter-design.md) — custom post-response counter replaced express-rate-limit; env vars LOGIN_RATE_MAX / LOGIN_RATE_WINDOW_MS; owner+driver stores are fully independent.
+- [Activity / Trip History](activity-trip-history.md) — owner and driver trip history use SAST-aware filtering, validated filters, and offset pagination.
+- [Notifications](notifications.md) — persistent owner/driver alerts are created through one DB-plus-Socket.io helper and scoped by session identity.

@@ -19,16 +19,10 @@ function createNotification(io, { recipientType, recipientId, type, title, messa
     VALUES (?, ?, ?, ?, ?)
   `).run(recipientType, recipientId, type, title, message);
 
-  const notif = {
-    id:             info.lastInsertRowid,
-    recipient_type: recipientType,
-    recipient_id:   recipientId,
-    type,
-    title,
-    message,
-    is_read:        0,
-    created_at:     new Date().toISOString(),
-  };
+  const notif = db.prepare(`
+    SELECT id, recipient_type, recipient_id, type, title, message, is_read, created_at
+    FROM notifications WHERE id = ?
+  `).get(info.lastInsertRowid);
 
   // Push to the correct room — rooms are validated at join-time (server.js)
   const room = recipientType === 'owner'

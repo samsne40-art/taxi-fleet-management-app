@@ -3,6 +3,7 @@
  */
 
 const BASE = 'http://localhost:5000';
+const { io: createSocketClient } = require('socket.io-client');
 
 let passed = 0;
 let failed = 0;
@@ -39,6 +40,49 @@ function extractCookie(res) {
   const raw = res.headers.get('set-cookie') || '';
   const match = raw.match(/connect\.sid=([^;]+)/);
   return match ? { 'connect.sid': match[1] } : {};
+}
+
+function cookieHeader(cookies) {
+  return Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+function connectSocket(cookies) {
+  return new Promise((resolve, reject) => {
+    const socket = createSocketClient(BASE, {
+      transports: ['websocket'],
+      extraHeaders: { Cookie: cookieHeader(cookies) },
+      reconnection: false,
+      timeout: 5000,
+    });
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error('Socket connection timed out'));
+    }, 6000);
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      resolve(socket);
+    });
+    socket.once('connect_error', (err) => {
+      clearTimeout(timer);
+      socket.close();
+      reject(err);
+    });
+  });
+}
+
+function waitForSocketEvent(socket, event, timeoutMs = 1200) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      socket.off(event, handler);
+      resolve(null);
+    }, timeoutMs);
+    function handler(payload) {
+      clearTimeout(timer);
+      socket.off(event, handler);
+      resolve(payload);
+    }
+    socket.on(event, handler);
+  });
 }
 
 // ── Global test state ─────────────────────────────────────────────────────────
@@ -294,6 +338,55 @@ async function testDriverOwnerMessage() {
   ok('Message > 1000 chars → 400', longMsg.status === 400);
 }
 
+// ── Socket.io delivery and room isolation ────────────────────────────────────
+async function testSocketDelivery() {
+  section('Socket.io — correct recipient only');
+
+  const [owner1Socket, owner2Socket, driver1Socket, driver2Socket] = await Promise.all([
+    connectSocket(owner1Cookies),
+    connectSocket(owner2Cookies),
+    connectSocket(driverCookies),
+    connectSocket(driver2Cookies),
+  ]);
+
+  try {
+    owner1Socket.emit('join_owner_room', owner1Id);
+    owner2Socket.emit('join_owner_room', owner1Id); // malicious cross-owner join
+    driver1Socket.emit('join_driver_room', driverId);
+    driver2Socket.emit('join_driver_room', driverId); // malicious cross-driver join
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const owner1Event = waitForSocketEvent(owner1Socket, 'new_notification');
+    const owner2Event = waitForSocketEvent(owner2Socket, 'new_notification');
+    const { res: driverMsgRes } = await api(`/api/driver/${driverId}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'Socket owner isolation test' }),
+    }, driverCookies);
+    ok('Socket owner trigger request succeeds', driverMsgRes.status === 200);
+
+    const [owner1Payload, owner2Payload] = await Promise.all([owner1Event, owner2Event]);
+    ok('Correct owner receives new_notification', owner1Payload?.type === 'new_message');
+    ok('Other owner does not receive notification', owner2Payload === null);
+
+    const driver1Event = waitForSocketEvent(driver1Socket, 'new_notification');
+    const driver2Event = waitForSocketEvent(driver2Socket, 'new_notification');
+    const { res: ownerMsgRes } = await api(`/api/owner/${owner1Id}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ driver_id: driverId, text: 'Socket driver isolation test' }),
+    }, owner1Cookies);
+    ok('Socket driver trigger request succeeds', ownerMsgRes.status === 200);
+
+    const [driver1Payload, driver2Payload] = await Promise.all([driver1Event, driver2Event]);
+    ok('Correct driver receives new_notification', driver1Payload?.type === 'new_message');
+    ok('Other driver does not receive notification', driver2Payload === null);
+  } finally {
+    owner1Socket.close();
+    owner2Socket.close();
+    driver1Socket.close();
+    driver2Socket.close();
+  }
+}
+
 // ── Unread count ──────────────────────────────────────────────────────────────
 async function testUnreadCount() {
   section('Unread count — GET unread-count');
@@ -532,25 +625,25 @@ async function testExistingFeatures() {
   }, driverCookies);
   ok('Trip recording still works', tripRes.status === 200 && tripData.ok === true, JSON.stringify(tripData));
 
-  const { res: earnRes } = await apiFetch(`/api/owner/${owner1Id}/earnings`, {}, owner1Cookies);
+  const earnRes = await apiFetch(`/api/owner/${owner1Id}/earnings`, {}, owner1Cookies);
   ok('Owner earnings still works', earnRes.status === 200, `HTTP ${earnRes.status}`);
 
-  const { res: dEarnRes } = await apiFetch(`/api/driver/${driverId}/earnings`, {}, driverCookies);
+  const dEarnRes = await apiFetch(`/api/driver/${driverId}/earnings`, {}, driverCookies);
   ok('Driver earnings still works', dEarnRes.status === 200, `HTTP ${dEarnRes.status}`);
 
-  const { res: msgRes } = await apiFetch(`/api/driver/${driverId}/messages`, {}, driverCookies);
+  const msgRes = await apiFetch(`/api/driver/${driverId}/messages`, {}, driverCookies);
   ok('Driver messages still works', msgRes.status === 200, `HTTP ${msgRes.status}`);
 
-  const { res: ratingRes } = await apiFetch(`/api/driver/${driverId}/ratings`, {}, driverCookies);
+  const ratingRes = await apiFetch(`/api/driver/${driverId}/ratings`, {}, driverCookies);
   ok('Driver ratings still works', ratingRes.status === 200, `HTTP ${ratingRes.status}`);
 
-  const { res: dashRes } = await apiFetch(`/api/owner/${owner1Id}/dashboard`, {}, owner1Cookies);
+  const dashRes = await apiFetch(`/api/owner/${owner1Id}/dashboard`, {}, owner1Cookies);
   ok('Owner dashboard still works', dashRes.status === 200, `HTTP ${dashRes.status}`);
 
-  const { res: feedbackRes } = await apiFetch(`/api/owner/${owner1Id}/feedback`, {}, owner1Cookies);
+  const feedbackRes = await apiFetch(`/api/owner/${owner1Id}/feedback`, {}, owner1Cookies);
   ok('Owner feedback still works', feedbackRes.status === 200, `HTTP ${feedbackRes.status}`);
 
-  const { res: fleetRes } = await apiFetch(`/api/owner/${owner1Id}/fleet`, {}, owner1Cookies);
+  const fleetRes = await apiFetch(`/api/owner/${owner1Id}/fleet`, {}, owner1Cookies);
   ok('Owner fleet still works', fleetRes.status === 200, `HTTP ${fleetRes.status}`);
 
   const { res: shiftEndRes } = await api(`/api/driver/${driverId}/shift/end`, { method: 'POST' }, driverCookies);
@@ -578,6 +671,7 @@ async function main() {
   await testPassengerFeedbackNotifications();
   await testDriverNotifications();
   await testDriverOwnerMessage();
+  await testSocketDelivery();
   await testUnreadCount();
   await testMarkRead();
   await testDriverMarkRead();
