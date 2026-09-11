@@ -159,11 +159,17 @@ function boot() {
       logout();
     }
   });
+  socket.on('new_notification', (notif) => {
+    driverNotifUnread++;
+    updateDriverNotifBadge();
+    prependDriverNotif(notif);
+  });
 
   loadEarnings();
   loadTripHistory();
   loadRatings();
   loadMessages();
+  loadDriverNotifications(false);
 }
 
 // ─── Shift ────────────────────────────────────────────────────────────────────
@@ -667,6 +673,128 @@ function renderTripHistory(trips, append) {
 
   // Show "Load more" only if a full page was returned (meaning there may be more)
   more.classList.toggle('hidden', (trips || []).length < TRIP_PAGE);
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+let driverNotifUnread = 0;
+let driverNotifOffset = 0;
+const DRIVER_NOTIF_PAGE = 20;
+
+async function loadDriverNotifications(append = false) {
+  try {
+    const res  = await fetch(`/api/driver/${driver.id}/notifications?limit=${DRIVER_NOTIF_PAGE}&offset=${driverNotifOffset}`, { credentials: 'include' });
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return;
+
+    driverNotifOffset += rows.length;
+    document.getElementById('driverNotifMoreBtn').classList.toggle('hidden', rows.length < DRIVER_NOTIF_PAGE);
+
+    const list = document.getElementById('driverNotifList');
+    if (!append) {
+      list.innerHTML = '';
+      // Count unread from fetched rows (first page)
+      driverNotifUnread = rows.filter((n) => !n.is_read).length;
+      updateDriverNotifBadge();
+    }
+    if (rows.length === 0 && !append) {
+      list.innerHTML = '<p class="muted">No notifications yet.</p>';
+      return;
+    }
+    rows.forEach((n) => appendDriverNotifRow(n, list));
+  } catch (_) { /* silent */ }
+}
+
+async function loadMoreDriverNotifs() {
+  await loadDriverNotifications(true);
+}
+
+function appendDriverNotifRow(n, listEl) {
+  const list = listEl || document.getElementById('driverNotifList');
+  const row  = document.createElement('div');
+  row.className = 'notif-item' + (n.is_read ? '' : ' notif-unread');
+  row.id = `dnotif-${n.id}`;
+  const { dateShort, time } = formatSADateTime(n.created_at);
+  let msgText = n.message;
+  try {
+    const parsed = JSON.parse(n.message);
+    if (parsed && typeof parsed === 'object') msgText = parsed.details || n.message;
+  } catch (_) { /* plain text */ }
+  row.innerHTML = `
+    <div class="notif-item-body">
+      <div class="notif-title">${escapeHtml(n.title)}</div>
+      <div class="notif-msg">${escapeHtml(msgText)}</div>
+      <div class="notif-time">${escapeHtml(dateShort)} · ${escapeHtml(time)}</div>
+    </div>
+    ${n.is_read ? '' : `<button class="notif-read-btn" onclick="markDriverNotifRead(${n.id}, this)">✓</button>`}
+  `;
+  list.appendChild(row);
+}
+
+function prependDriverNotif(n) {
+  const list = document.getElementById('driverNotifList');
+  const empty = list.querySelector('p.muted');
+  if (empty) empty.remove();
+
+  const row  = document.createElement('div');
+  row.className = 'notif-item notif-unread';
+  row.id = `dnotif-${n.id}`;
+  const { dateShort, time } = formatSADateTime(n.created_at);
+  let msgText = n.message;
+  try {
+    const parsed = JSON.parse(n.message);
+    if (parsed && typeof parsed === 'object') msgText = parsed.details || n.message;
+  } catch (_) { /* plain text */ }
+  row.innerHTML = `
+    <div class="notif-item-body">
+      <div class="notif-title">${escapeHtml(n.title)}</div>
+      <div class="notif-msg">${escapeHtml(msgText)}</div>
+      <div class="notif-time">${escapeHtml(dateShort)} · ${escapeHtml(time)}</div>
+    </div>
+    <button class="notif-read-btn" onclick="markDriverNotifRead(${n.id}, this)">✓</button>
+  `;
+  list.prepend(row);
+}
+
+async function markDriverNotifRead(notifId, btn) {
+  try {
+    const res = await fetch(`/api/driver/${driver.id}/notifications/${notifId}/read`, {
+      method: 'POST', credentials: 'include',
+    });
+    if (!res.ok) return;
+    const row = document.getElementById(`dnotif-${notifId}`);
+    if (row) {
+      row.classList.remove('notif-unread');
+      if (btn) btn.remove();
+    }
+    if (driverNotifUnread > 0) driverNotifUnread--;
+    updateDriverNotifBadge();
+  } catch (_) { /* silent */ }
+}
+
+async function markAllDriverNotifsRead() {
+  try {
+    await fetch(`/api/driver/${driver.id}/notifications/read-all`, {
+      method: 'POST', credentials: 'include',
+    });
+    driverNotifUnread = 0;
+    updateDriverNotifBadge();
+    document.getElementById('driverNotifList').querySelectorAll('.notif-item').forEach((r) => {
+      r.classList.remove('notif-unread');
+      const b = r.querySelector('.notif-read-btn');
+      if (b) b.remove();
+    });
+  } catch (_) { /* silent */ }
+}
+
+function updateDriverNotifBadge() {
+  const badge = document.getElementById('driverNotifBadge');
+  if (badge) {
+    badge.textContent = driverNotifUnread;
+    badge.classList.toggle('hidden', driverNotifUnread <= 0);
+  }
+  const markBtn = document.getElementById('driverMarkAllBtn');
+  if (markBtn) markBtn.style.display = driverNotifUnread > 0 ? '' : 'none';
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../db');
+const { createNotification } = require('../utils/notifications');
 
 // Allowed report type values — arbitrary strings are rejected
 const ALLOWED_REPORT_TYPES = [
@@ -86,11 +87,28 @@ router.post('/feedback', (req, res) => {
     report_types: types,
   };
 
-  req.app.locals.io.to(`owner_${taxi.owner_id}`).emit('new_feedback', payload);
+  const io = req.app.locals.io;
+  io.to(`owner_${taxi.owner_id}`).emit('new_feedback', payload);
+
+  // Persist new-rating notification for the owner
+  createNotification(io, {
+    recipientType: 'owner',
+    recipientId:   taxi.owner_id,
+    type:          'new_rating',
+    title:         `⭐ New rating — ${taxi.plate}`,
+    message:       `Taxi ${taxi.plate}${driver ? ` (${driver.name})` : ''} received a ${ratingNum}-star rating${comment ? `: "${comment.slice(0,80)}${comment.length > 80 ? '…' : ''}"` : ''}.`,
+  });
 
   // Alert owner if rating is low (≤ 2) or incident types reported
   if (types.length || ratingNum <= 2) {
-    req.app.locals.io.to(`owner_${taxi.owner_id}`).emit('new_complaint', payload);
+    io.to(`owner_${taxi.owner_id}`).emit('new_complaint', payload);
+    createNotification(io, {
+      recipientType: 'owner',
+      recipientId:   taxi.owner_id,
+      type:          'new_complaint',
+      title:         `⚠️ Complaint — ${taxi.plate}`,
+      message:       `Taxi ${taxi.plate}${driver ? ` (${driver.name})` : ''}: ${types.length ? types.join(', ') : `${ratingNum}-star rating`}.`,
+    });
   }
 
   res.json({ ok: true });

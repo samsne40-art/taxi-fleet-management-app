@@ -12,6 +12,11 @@ let earnData        = null;
 let earnCustomStart = null;
 let earnCustomEnd   = null;
 
+// Notifications state
+let ownerNotifUnread  = 0;
+let ownerNotifOffset  = 0;
+const NOTIF_PAGE      = 20;
+
 // ════════════════════════════════════════════════════ SECTION NAVIGATION ══
 
 let activeSection = null;
@@ -142,10 +147,21 @@ function boot() {
   socket.on('sos_alert', (alert) => {
     showSosBanner(alert);
     if (activeSection === 'notifications') renderNotifSos();
-    setBadge('notifications', getActiveSosCount() + 1);
+    ownerNotifUnread++;
+    updateOwnerNotifBadge();
+  });
+  socket.on('new_notification', (notif) => {
+    ownerNotifUnread++;
+    updateOwnerNotifBadge();
+    if (activeSection === 'notifications') prependOwnerNotif(notif);
+  });
+  socket.on('new_driver_message', () => {
+    ownerNotifUnread++;
+    updateOwnerNotifBadge();
   });
 
   loadDashboard().then(() => { refreshCCStats(); });
+  fetchOwnerUnreadCount();
 
   setInterval(() => { if (!owner) return; loadDashboard().then(() => refreshCCStats()); }, 15000);
   setInterval(() => { if (owner && activeSection === 'fleet') loadFleet(); }, 20000);
@@ -746,6 +762,148 @@ async function enterNotifications() {
   if (!dashboardData) await loadDashboard();
   renderNotifSos();
   if (!driversData) await loadDrivers();
+  ownerNotifOffset = 0;
+  await loadOwnerNotifications(false);
+  populateMsgDriverSelect();
+}
+
+// ── Owner notification list ────────────────────────────────────────────────────
+
+async function loadOwnerNotifications(append = false) {
+  try {
+    const res  = await fetch(`/api/owner/${owner.id}/notifications?limit=${NOTIF_PAGE}&offset=${ownerNotifOffset}`, { credentials: 'include' });
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return;
+
+    ownerNotifOffset += rows.length;
+    el('notifLoadMoreBtn').classList.toggle('hidden', rows.length < NOTIF_PAGE);
+
+    if (!append) {
+      el('ownerNotifList').innerHTML = '';
+    }
+    if (rows.length === 0 && !append) {
+      el('ownerNotifList').innerHTML = '<p class="muted">No notifications yet.</p>';
+      return;
+    }
+    rows.forEach((n) => appendOwnerNotifRow(n));
+  } catch (_) { /* silent */ }
+}
+
+async function loadMoreOwnerNotifs() {
+  await loadOwnerNotifications(true);
+}
+
+function appendOwnerNotifRow(n) {
+  const list = el('ownerNotifList');
+  const row  = document.createElement('div');
+  row.className = 'notif-item' + (n.is_read ? '' : ' notif-unread');
+  row.id = `notif-${n.id}`;
+  const { dateShort, time } = formatSADateTime(n.created_at);
+  // message may be JSON (doc_expiry type) — extract display text
+  let msgText = n.message;
+  try {
+    const parsed = JSON.parse(n.message);
+    if (parsed && typeof parsed === 'object') msgText = parsed.details || n.message;
+  } catch (_) { /* plain text */ }
+  row.innerHTML = `
+    <div class="notif-item-body">
+      <div class="notif-title">${escapeHtml(n.title)}</div>
+      <div class="notif-msg">${escapeHtml(msgText)}</div>
+      <div class="notif-time">${escapeHtml(dateShort)} · ${escapeHtml(time)}</div>
+    </div>
+    ${n.is_read ? '' : `<button class="notif-read-btn" onclick="markOwnerNotifRead(${n.id}, this)">✓</button>`}
+  `;
+  list.appendChild(row);
+}
+
+function prependOwnerNotif(n) {
+  const list = el('ownerNotifList');
+  // Remove empty-state message if present
+  const empty = list.querySelector('p.muted');
+  if (empty) empty.remove();
+
+  const row  = document.createElement('div');
+  row.className = 'notif-item notif-unread';
+  row.id = `notif-${n.id}`;
+  const { dateShort, time } = formatSADateTime(n.created_at);
+  let msgText = n.message;
+  try {
+    const parsed = JSON.parse(n.message);
+    if (parsed && typeof parsed === 'object') msgText = parsed.details || n.message;
+  } catch (_) { /* plain text */ }
+  row.innerHTML = `
+    <div class="notif-item-body">
+      <div class="notif-title">${escapeHtml(n.title)}</div>
+      <div class="notif-msg">${escapeHtml(msgText)}</div>
+      <div class="notif-time">${escapeHtml(dateShort)} · ${escapeHtml(time)}</div>
+    </div>
+    <button class="notif-read-btn" onclick="markOwnerNotifRead(${n.id}, this)">✓</button>
+  `;
+  list.prepend(row);
+}
+
+async function markOwnerNotifRead(notifId, btn) {
+  try {
+    const res = await fetch(`/api/owner/${owner.id}/notifications/${notifId}/read`, {
+      method: 'POST', credentials: 'include',
+    });
+    if (!res.ok) return;
+    const row = el(`notif-${notifId}`);
+    if (row) {
+      row.classList.remove('notif-unread');
+      if (btn) btn.remove();
+    }
+    if (ownerNotifUnread > 0) ownerNotifUnread--;
+    updateOwnerNotifBadge();
+  } catch (_) { /* silent */ }
+}
+
+async function markAllOwnerNotifsRead() {
+  try {
+    await fetch(`/api/owner/${owner.id}/notifications/read-all`, {
+      method: 'POST', credentials: 'include',
+    });
+    ownerNotifUnread = 0;
+    updateOwnerNotifBadge();
+    // Remove unread styling and mark-read buttons from rendered rows
+    el('ownerNotifList').querySelectorAll('.notif-item').forEach((r) => {
+      r.classList.remove('notif-unread');
+      const btn = r.querySelector('.notif-read-btn');
+      if (btn) btn.remove();
+    });
+  } catch (_) { /* silent */ }
+}
+
+async function fetchOwnerUnreadCount() {
+  try {
+    const res  = await fetch(`/api/owner/${owner.id}/notifications/unread-count`, { credentials: 'include' });
+    const data = await res.json();
+    if (typeof data.count === 'number') {
+      ownerNotifUnread = data.count;
+      updateOwnerNotifBadge();
+    }
+  } catch (_) { /* silent */ }
+}
+
+function updateOwnerNotifBadge() {
+  setBadge('notifications', ownerNotifUnread);
+  const badge = el('notifUnreadBadge');
+  if (badge) {
+    badge.textContent = ownerNotifUnread;
+    badge.classList.toggle('hidden', ownerNotifUnread <= 0);
+  }
+  const markBtn = el('markAllReadBtn');
+  if (markBtn) markBtn.classList.toggle('hidden', ownerNotifUnread <= 0);
+}
+
+function populateMsgDriverSelect() {
+  if (!driversData) return;
+  const sel = el('msgDriver');
+  if (!sel) return;
+  const approved = driversData.filter((d) => d.verification_status === 'approved');
+  sel.innerHTML = approved.length
+    ? approved.map((d) => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')
+    : '<option value="">No approved drivers</option>';
 }
 
 function renderNotifSos() {
@@ -783,8 +941,8 @@ function refreshCCStats() {
   } else {
     el('ccPending').textContent = '–';
   }
-  const sosCount = (d.activeSos || []).length;
-  setBadge('notifications', sosCount);
+  // Notification badge is now driven by ownerNotifUnread, not SOS count alone
+  updateOwnerNotifBadge();
 }
 
 function setBadge(sectionId, count) {

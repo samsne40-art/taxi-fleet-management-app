@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireDriver } = require('../middleware/auth');
 const { saToday, saWeekStart, saWeekEnd, saMonthStart, saMonthEnd, saMonthName } = require('../utils/time');
+const { createNotification } = require('../utils/notifications');
 
 // ── Auth (public) ────────────────────────────────────────────────────────────
 
@@ -77,10 +78,20 @@ router.post('/:driverId/shift/start', requireDriver, (req, res) => {
 
   const taxi = db.prepare('SELECT plate FROM taxis WHERE id = ?').get(driver.current_taxi_id);
 
-  req.app.locals.io.to(`owner_${driver.owner_id}`).emit('taxi_status', {
+  const io = req.app.locals.io;
+  io.to(`owner_${driver.owner_id}`).emit('taxi_status', {
     taxi_id: driver.current_taxi_id, status: 'online',
     driver_name: driver.name, plate: taxi?.plate,
   });
+
+  createNotification(io, {
+    recipientType: 'owner',
+    recipientId:   driver.owner_id,
+    type:          'shift_start',
+    title:         `🟢 Shift started — ${driver.name}`,
+    message:       `${driver.name} started a shift${taxi?.plate ? ` in taxi ${taxi.plate}` : ''}.`,
+  });
+
   res.json({ ok: true, shiftId: info.lastInsertRowid, taxi_id: driver.current_taxi_id, plate: taxi?.plate });
 });
 
@@ -91,14 +102,24 @@ router.post('/:driverId/shift/end', requireDriver, (req, res) => {
 
   db.prepare('UPDATE shifts SET end_time = CURRENT_TIMESTAMP WHERE driver_id = ? AND end_time IS NULL').run(driverId);
 
+  const io = req.app.locals.io;
   if (driver.current_taxi_id) {
     db.prepare("UPDATE taxis SET status = 'offline' WHERE id = ?").run(driver.current_taxi_id);
     const taxi = db.prepare('SELECT plate FROM taxis WHERE id = ?').get(driver.current_taxi_id);
-    req.app.locals.io.to(`owner_${driver.owner_id}`).emit('taxi_status', {
+    io.to(`owner_${driver.owner_id}`).emit('taxi_status', {
       taxi_id: driver.current_taxi_id, status: 'offline',
       driver_name: driver.name, plate: taxi?.plate,
     });
   }
+
+  createNotification(io, {
+    recipientType: 'owner',
+    recipientId:   driver.owner_id,
+    type:          'shift_end',
+    title:         `🔴 Shift ended — ${driver.name}`,
+    message:       `${driver.name} ended their shift and went offline.`,
+  });
+
   res.json({ ok: true });
 });
 
@@ -314,6 +335,36 @@ router.get('/:driverId/messages', requireDriver, (req, res) => {
   res.json(rows);
 });
 
+// Driver → Owner message
+router.post('/:driverId/message', requireDriver, (req, res) => {
+  const driverId = req.session.userId;
+  const { text } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'text is required' });
+  if (text.length > 1000) return res.status(400).json({ error: 'message cannot exceed 1000 characters' });
+
+  const driver = db.prepare('SELECT id, name, owner_id FROM drivers WHERE id = ?').get(driverId);
+  if (!driver) return res.status(404).json({ error: 'driver not found' });
+
+  db.prepare('INSERT INTO messages (owner_id, driver_id, sender, text) VALUES (?, ?, ?, ?)')
+    .run(driver.owner_id, driverId, 'driver', text.trim());
+
+  const io = req.app.locals.io;
+
+  // Real-time delivery to owner
+  io.to(`owner_${driver.owner_id}`).emit('new_driver_message', { from: 'driver', driver_id: driverId, driver_name: driver.name, text: text.trim() });
+
+  // Persist notification for owner
+  createNotification(io, {
+    recipientType: 'owner',
+    recipientId:   driver.owner_id,
+    type:          'new_message',
+    title:         `💬 Message from ${driver.name}`,
+    message:       text.trim().length > 120 ? text.trim().slice(0, 117) + '…' : text.trim(),
+  });
+
+  res.json({ ok: true });
+});
+
 // ── SOS ───────────────────────────────────────────────────────────────────────
 
 router.post('/:driverId/sos', requireDriver, (req, res) => {
@@ -329,10 +380,64 @@ router.post('/:driverId/sos', requireDriver, (req, res) => {
     'INSERT INTO sos_alerts (driver_id, taxi_id, lat, lng) VALUES (?, ?, ?, ?)'
   ).run(driverId, driver.current_taxi_id, latN, lngN);
 
-  req.app.locals.io.to(`owner_${driver.owner_id}`).emit('sos_alert', {
+  const io = req.app.locals.io;
+  io.to(`owner_${driver.owner_id}`).emit('sos_alert', {
     id: info.lastInsertRowid, driver_id: driverId,
     driver_name: driver.name, taxi_id: driver.current_taxi_id, lat: latN, lng: lngN,
   });
+
+  createNotification(io, {
+    recipientType: 'owner',
+    recipientId:   driver.owner_id,
+    type:          'sos_alert',
+    title:         `🚨 SOS — ${driver.name}`,
+    message:       `${driver.name} sent an SOS alert${latN != null ? ` — GPS: ${latN.toFixed(4)}, ${lngN.toFixed(4)}` : ''}.`,
+  });
+
+  res.json({ ok: true });
+});
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+router.get('/:driverId/notifications', requireDriver, (req, res) => {
+  const recipientId = req.session.userId;
+  const limit  = Math.min(parseInt(req.query.limit,  10) || 50, 200);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0,  0);
+  const rows = db.prepare(`
+    SELECT id, type, title, message, is_read, created_at
+    FROM notifications
+    WHERE recipient_type = 'driver' AND recipient_id = ?
+    ORDER BY created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `).all(recipientId);
+  res.json(rows);
+});
+
+router.get('/:driverId/notifications/unread-count', requireDriver, (req, res) => {
+  const recipientId = req.session.userId;
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count FROM notifications
+    WHERE recipient_type = 'driver' AND recipient_id = ? AND is_read = 0
+  `).get(recipientId);
+  res.json({ count: row.count });
+});
+
+router.post('/:driverId/notifications/:notifId/read', requireDriver, (req, res) => {
+  const recipientId = req.session.userId;
+  const result = db.prepare(`
+    UPDATE notifications SET is_read = 1
+    WHERE id = ? AND recipient_type = 'driver' AND recipient_id = ?
+  `).run(req.params.notifId, recipientId);
+  if (result.changes === 0) return res.status(404).json({ error: 'notification not found' });
+  res.json({ ok: true });
+});
+
+router.post('/:driverId/notifications/read-all', requireDriver, (req, res) => {
+  const recipientId = req.session.userId;
+  db.prepare(`
+    UPDATE notifications SET is_read = 1
+    WHERE recipient_type = 'driver' AND recipient_id = ? AND is_read = 0
+  `).run(recipientId);
   res.json({ ok: true });
 });
 

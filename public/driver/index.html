@@ -152,6 +152,18 @@
       <div id="ratingsBody"><p class="muted">Loading…</p></div>
     </section>
 
+    <!-- Notifications -->
+    <section class="card" id="driverNotifCard">
+      <div class="notif-hdr-row">
+        <h2 style="margin:0;font-size:16px;">🔔 Notifications
+          <span class="notif-unread-badge hidden" id="driverNotifBadge"></span>
+        </h2>
+        <button class="section-action-btn" onclick="markAllDriverNotifsRead()" id="driverMarkAllBtn" style="display:none;">Mark all read</button>
+      </div>
+      <div id="driverNotifList" style="margin-top:10px;"><p class="muted">Loading…</p></div>
+      <button class="secondary notif-load-more hidden" id="driverNotifMoreBtn" onclick="loadMoreDriverNotifs()" style="margin-top:8px;">Load more</button>
+    </section>
+
     <!-- Messages -->
     <section class="card">
       <h2>Messages from owner</h2>

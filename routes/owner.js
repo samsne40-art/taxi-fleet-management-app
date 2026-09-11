@@ -8,6 +8,7 @@ const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
 const { requireOwner } = require('../middleware/auth');
 const { saToday, saWeekStart, saWeekEnd, saMonthStart, saMonthEnd, saMonthName } = require('../utils/time');
+const { createNotification, createDocExpiryNotificationIfNeeded } = require('../utils/notifications');
 
 const SALT_ROUNDS = 10;
 
@@ -207,6 +208,32 @@ router.post('/:ownerId/drivers/:driverId/verify', requireOwner, (req, res) => {
 
   db.prepare('UPDATE drivers SET verification_status = ? WHERE id = ?').run(status, driverId);
   req.app.locals.io.to(`driver_${driverId}`).emit('verification_update', { status });
+
+  const io = req.app.locals.io;
+  const statusLabels = { approved: 'approved ✅', rejected: 'rejected ❌', suspended: 'suspended 🔒', pending: 'set to pending' };
+  const label = statusLabels[status] || status;
+
+  // Notify the driver
+  createNotification(io, {
+    recipientType: 'driver',
+    recipientId:   parseInt(driverId, 10),
+    type:          'driver_status',
+    title:         status === 'approved' ? '✅ Account approved'
+                 : status === 'rejected' ? '❌ Account rejected'
+                 : status === 'suspended' ? '🔒 Account suspended'
+                 : 'Account status updated',
+    message:       `Your account has been ${label} by the owner.`,
+  });
+
+  // Also notify the owner as a record of the action
+  createNotification(io, {
+    recipientType: 'owner',
+    recipientId:   parseInt(req.params.ownerId, 10),
+    type:          'driver_status',
+    title:         `Driver ${label} — ${driver.name}`,
+    message:       `You ${status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : status === 'suspended' ? 'suspended' : 'updated'} driver ${driver.name}.`,
+  });
+
   res.json({ ok: true, verification_status: status });
 });
 
@@ -225,6 +252,27 @@ router.post('/:ownerId/drivers/:driverId/assign', requireOwner, (req, res) => {
   }
 
   db.prepare('UPDATE drivers SET current_taxi_id = ? WHERE id = ? AND owner_id = ?').run(taxi_id || null, driverId, ownerId);
+
+  const io = req.app.locals.io;
+  if (taxi_id) {
+    const assignedTaxi = db.prepare('SELECT plate FROM taxis WHERE id = ?').get(taxi_id);
+    createNotification(io, {
+      recipientType: 'driver',
+      recipientId:   parseInt(driverId, 10),
+      type:          'taxi_assigned',
+      title:         '🚕 Taxi assigned',
+      message:       `You have been assigned to taxi ${assignedTaxi?.plate || taxi_id}.`,
+    });
+  } else {
+    createNotification(io, {
+      recipientType: 'driver',
+      recipientId:   parseInt(driverId, 10),
+      type:          'taxi_assigned',
+      title:         '🚕 Taxi unassigned',
+      message:       'You have been unassigned from your taxi.',
+    });
+  }
+
   res.json({ ok: true });
 });
 
@@ -240,7 +288,19 @@ router.post('/:ownerId/message', requireOwner, (req, res) => {
 
   db.prepare('INSERT INTO messages (owner_id, driver_id, sender, text) VALUES (?, ?, ?, ?)')
     .run(ownerId, driver_id, 'owner', text);
-  req.app.locals.io.to(`driver_${driver_id}`).emit('new_message', { from: 'owner', text });
+
+  const io = req.app.locals.io;
+  io.to(`driver_${driver_id}`).emit('new_message', { from: 'owner', text });
+
+  // Persist a notification for the driver
+  createNotification(io, {
+    recipientType: 'driver',
+    recipientId:   parseInt(driver_id, 10),
+    type:          'new_message',
+    title:         '💬 Message from owner',
+    message:       text.length > 120 ? text.slice(0, 117) + '…' : text,
+  });
+
   res.json({ ok: true });
 });
 
@@ -324,6 +384,18 @@ router.get('/:ownerId/dashboard', requireOwner, (req, res) => {
       (pdp_expiry IS NOT NULL AND pdp_expiry <= date('now', '+60 days'))
     )
   `).all(ownerId);
+
+  // Create doc-expiry notifications (throttled to once per driver per 24h)
+  const io = req.app.locals.io;
+  for (const d of expiringDocs) {
+    const fields = {};
+    if (d.license_expiry && d.license_expiry <= new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+      fields.license_expiry = d.license_expiry;
+    if (d.pdp_expiry && d.pdp_expiry <= new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+      fields.pdp_expiry = d.pdp_expiry;
+    if (Object.keys(fields).length)
+      createDocExpiryNotificationIfNeeded(io, { ownerId: parseInt(ownerId, 10), driverId: d.id, driverName: d.name, expiryFields: fields });
+  }
 
   res.json({
     taxisOnline:  online,
@@ -555,6 +627,54 @@ router.get('/:ownerId/feedback', requireOwner, (req, res) => {
     WHERE t.owner_id = ? ORDER BY f.created_at DESC LIMIT 100
   `).all(req.params.ownerId);
   res.json(rows.map((r) => ({ ...r, report_types: JSON.parse(r.report_types || '[]') })));
+});
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+// GET  /:ownerId/notifications         — paginated list (newest first)
+router.get('/:ownerId/notifications', requireOwner, (req, res) => {
+  const recipientId = req.session.userId;
+  const limit  = Math.min(parseInt(req.query.limit,  10) || 50, 200);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0,  0);
+  const rows = db.prepare(`
+    SELECT id, type, title, message, is_read, created_at
+    FROM notifications
+    WHERE recipient_type = 'owner' AND recipient_id = ?
+    ORDER BY created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `).all(recipientId);
+  res.json(rows);
+});
+
+// GET  /:ownerId/notifications/unread-count
+router.get('/:ownerId/notifications/unread-count', requireOwner, (req, res) => {
+  const recipientId = req.session.userId;
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count FROM notifications
+    WHERE recipient_type = 'owner' AND recipient_id = ? AND is_read = 0
+  `).get(recipientId);
+  res.json({ count: row.count });
+});
+
+// POST /:ownerId/notifications/:notifId/read — mark one as read
+router.post('/:ownerId/notifications/:notifId/read', requireOwner, (req, res) => {
+  const recipientId = req.session.userId;
+  const result = db.prepare(`
+    UPDATE notifications SET is_read = 1
+    WHERE id = ? AND recipient_type = 'owner' AND recipient_id = ?
+  `).run(req.params.notifId, recipientId);
+  if (result.changes === 0) return res.status(404).json({ error: 'notification not found' });
+  res.json({ ok: true });
+});
+
+// POST /:ownerId/notifications/read-all — mark all as read
+router.post('/:ownerId/notifications/read-all', requireOwner, (req, res) => {
+  const recipientId = req.session.userId;
+  db.prepare(`
+    UPDATE notifications SET is_read = 1
+    WHERE recipient_type = 'owner' AND recipient_id = ? AND is_read = 0
+  `).run(recipientId);
+  res.json({ ok: true });
 });
 
 router.post('/:ownerId/sos/:sosId/resolve', requireOwner, (req, res) => {

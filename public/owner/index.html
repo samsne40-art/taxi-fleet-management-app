@@ -569,6 +569,18 @@
       </div>
 
       <div class="sp-body">
+        <!-- Notification feed -->
+        <div class="card">
+          <div class="notif-hdr-row">
+            <h3 class="card-subh" style="margin:0;">📬 Recent notifications
+              <span class="notif-unread-badge hidden" id="notifUnreadBadge"></span>
+            </h3>
+            <button class="section-action-btn" onclick="markAllOwnerNotifsRead()" id="markAllReadBtn">Mark all read</button>
+          </div>
+          <div id="ownerNotifList"><p class="muted">Loading…</p></div>
+          <button class="secondary notif-load-more hidden" id="notifLoadMoreBtn" onclick="loadMoreOwnerNotifs()">Load more</button>
+        </div>
+
         <!-- Active SOS alerts -->
         <div class="card" id="notifSosCard">
           <h3 class="card-subh">🚨 Active SOS alerts</h3>
@@ -583,13 +595,6 @@
           <label class="field-label" style="margin-top:4px;">Message</label>
           <textarea id="msgText" rows="3" placeholder="Type your message…"></textarea>
           <button onclick="sendMessage()">Send message</button>
-        </div>
-
-        <!-- Push notifications placeholder -->
-        <div class="card coming-soon-card">
-          <p class="coming-soon-icon">📲</p>
-          <p class="coming-soon-title">Push notifications</p>
-          <p class="muted">Real-time push alerts to your phone — coming soon</p>
         </div>
       </div>
     </section>
